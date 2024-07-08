@@ -3,34 +3,35 @@
 // </copyright>
 
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
 using FubarDev.WebDavServer.FileSystem;
-
-using JetBrains.Annotations;
+using FubarDev.WebDavServer.Utils;
 
 namespace FubarDev.WebDavServer.Engines.Local
 {
     /// <summary>
-    /// The <see cref="ITargetActions{TCollection,TDocument,TMissing}"/> implementation that moves between two file systems
+    /// The <see cref="ITargetActions{TCollection,TDocument,TMissing}"/> implementation that moves between two file systems.
     /// </summary>
     public class MoveBetweenFileSystemsTargetAction : ITargetActions<CollectionTarget, DocumentTarget, MissingTarget>
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="MoveBetweenFileSystemsTargetAction"/> class.
         /// </summary>
-        /// <param name="dispatcher">The WebDAV dispatcher</param>
-        public MoveBetweenFileSystemsTargetAction([NotNull] IWebDavDispatcher dispatcher)
+        /// <param name="context">The current WebDAV context.</param>
+        public MoveBetweenFileSystemsTargetAction(IWebDavContext context)
         {
-            Dispatcher = dispatcher;
+            Context = context;
         }
 
         /// <inheritdoc />
-        public IWebDavDispatcher Dispatcher { get; }
+        public IWebDavContext Context { get; }
 
         /// <inheritdoc />
-        public RecursiveTargetBehaviour ExistingTargetBehaviour { get; } = RecursiveTargetBehaviour.Overwrite;
+        public RecursiveTargetBehaviour ExistingTargetBehaviour { get; } = RecursiveTargetBehaviour.DeleteTarget;
 
         /// <inheritdoc />
         public async Task<DocumentTarget> ExecuteAsync(IDocument source, MissingTarget destination, CancellationToken cancellationToken)
@@ -65,27 +66,34 @@ namespace FubarDev.WebDavServer.Engines.Local
         }
 
         /// <inheritdoc />
-        public async Task ExecuteAsync(ICollection source, CollectionTarget destination, CancellationToken cancellationToken)
+        public async Task CleanupAsync(
+            ICollection source,
+            CollectionTarget destination,
+            IEnumerable<ActionResult> childResults,
+            CancellationToken cancellationToken)
         {
+            if (childResults.Any(r => r.IsFailure))
+            {
+                return;
+            }
+
             await CopyETagAsync(source, destination.Collection, cancellationToken).ConfigureAwait(false);
             await source.DeleteAsync(cancellationToken).ConfigureAwait(false);
         }
 
         private static async Task MoveAsync(IDocument source, IDocument destination, CancellationToken cancellationToken)
         {
-            using (var sourceStream = await source.OpenReadAsync(cancellationToken).ConfigureAwait(false))
-            {
-                using (var destinationStream = await destination.CreateAsync(cancellationToken).ConfigureAwait(false))
-                {
-                    await sourceStream.CopyToAsync(destinationStream, 65536, cancellationToken).ConfigureAwait(false);
-                }
-            }
+            using var sourceStream = await source.OpenReadAsync(cancellationToken).ConfigureAwait(false);
+            using var destinationStream = await destination.CreateAsync(cancellationToken).ConfigureAwait(false);
+            await sourceStream.CopyToAsync(destinationStream, SystemInfo.CopyBufferSize, cancellationToken).ConfigureAwait(false);
         }
 
         private static async Task CopyETagAsync(IEntry source, IEntry dest, CancellationToken cancellationToken)
         {
             if (dest is IEntityTagEntry)
+            {
                 return;
+            }
 
             var sourcePropStore = source.FileSystem.PropertyStore;
             var destPropStore = dest.FileSystem.PropertyStore;

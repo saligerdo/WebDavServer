@@ -5,8 +5,6 @@
 using System.Threading;
 using System.Threading.Tasks;
 
-using JetBrains.Annotations;
-
 namespace FubarDev.WebDavServer.Engines
 {
     /// <summary>
@@ -21,11 +19,10 @@ namespace FubarDev.WebDavServer.Engines
         where TMissing : class, IMissingTarget<TCollection, TDocument, TMissing>
     {
         /// <summary>
-        /// Creates a collection with the same name of this target
+        /// Creates a collection with the same name of this target.
         /// </summary>
-        /// <param name="cancellationToken">The cancellation token</param>
-        /// <returns>The created collection target</returns>
-        [NotNull]
+        /// <param name="cancellationToken">The cancellation token.</param>
+        /// <returns>The created collection target.</returns>
         Task<TCollection> CreateCollectionAsync(CancellationToken cancellationToken);
     }
 }

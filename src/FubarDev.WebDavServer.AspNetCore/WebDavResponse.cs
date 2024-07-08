@@ -13,7 +13,7 @@ using Microsoft.Extensions.Primitives;
 namespace FubarDev.WebDavServer.AspNetCore
 {
     /// <summary>
-    /// The implementation of the <see cref="IWebDavResponse"/>
+    /// The implementation of the <see cref="IWebDavResponse"/>.
     /// </summary>
     /// <remarks>
     /// This class wraps a <see cref="HttpResponse"/> to be accessible by the WebDAV serves <see cref="IWebDavResult"/>.
@@ -25,17 +25,17 @@ namespace FubarDev.WebDavServer.AspNetCore
         /// <summary>
         /// Initializes a new instance of the <see cref="WebDavResponse"/> class.
         /// </summary>
-        /// <param name="dispatcher">The WebDAV HTTP method dispatcher</param>
-        /// <param name="response">The ASP.NET Core HTTP response</param>
-        public WebDavResponse(IWebDavDispatcher dispatcher, HttpResponse response)
+        /// <param name="context">The current WebDAV context.</param>
+        /// <param name="response">The ASP.NET Core HTTP response.</param>
+        public WebDavResponse(IWebDavContext context, HttpResponse response)
         {
+            Context = context;
             _response = response;
-            Dispatcher = dispatcher;
             Headers = new HeadersDictionary(_response.Headers);
         }
 
         /// <inheritdoc />
-        public IWebDavDispatcher Dispatcher { get; }
+        public IWebDavContext Context { get; }
 
         /// <inheritdoc />
         public IDictionary<string, string[]> Headers { get; }
@@ -97,12 +97,16 @@ namespace FubarDev.WebDavServer.AspNetCore
             {
                 var values = _headers[item.Key].ToArray();
                 if (item.Value.Length != values.Length)
+                {
                     return false;
+                }
 
                 for (var i = 0; i != values.Length; ++i)
                 {
                     if (item.Value[i] != values[i])
+                    {
                         return false;
+                    }
                 }
 
                 return true;
@@ -138,14 +142,13 @@ namespace FubarDev.WebDavServer.AspNetCore
 
             public bool TryGetValue(string key, out string[] value)
             {
-                StringValues values;
-                if (_headers.TryGetValue(key, out values))
+                if (_headers.TryGetValue(key, out var values))
                 {
                     value = values.ToArray();
                     return true;
                 }
 
-                value = null;
+                value = null!;
                 return false;
             }
         }

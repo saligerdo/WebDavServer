@@ -4,21 +4,17 @@
 
 using System;
 
-using FubarDev.WebDavServer.Model;
-
-using JetBrains.Annotations;
-
 namespace FubarDev.WebDavServer
 {
     /// <summary>
-    /// The WebDAV exception
+    /// The WebDAV exception.
     /// </summary>
     public class WebDavException : Exception
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="WebDavException"/> class.
         /// </summary>
-        /// <param name="statusCode">The WebDAV status code</param>
+        /// <param name="statusCode">The WebDAV status code.</param>
         public WebDavException(WebDavStatusCode statusCode)
             : base(statusCode.GetReasonPhrase())
         {
@@ -28,9 +24,9 @@ namespace FubarDev.WebDavServer
         /// <summary>
         /// Initializes a new instance of the <see cref="WebDavException"/> class.
         /// </summary>
-        /// <param name="statusCode">The WebDAV status code</param>
-        /// <param name="innerException">The inner exception</param>
-        public WebDavException(WebDavStatusCode statusCode, [NotNull] Exception innerException)
+        /// <param name="statusCode">The WebDAV status code.</param>
+        /// <param name="innerException">The inner exception.</param>
+        public WebDavException(WebDavStatusCode statusCode, Exception innerException)
             : base(statusCode.GetReasonPhrase(innerException.Message), innerException)
         {
             StatusCode = statusCode;
@@ -39,8 +35,8 @@ namespace FubarDev.WebDavServer
         /// <summary>
         /// Initializes a new instance of the <see cref="WebDavException"/> class.
         /// </summary>
-        /// <param name="statusCode">The WebDAV status code</param>
-        /// <param name="responseMessage">The reason phrase for the status code</param>
+        /// <param name="statusCode">The WebDAV status code.</param>
+        /// <param name="responseMessage">The reason phrase for the status code.</param>
         public WebDavException(WebDavStatusCode statusCode, string responseMessage)
             : base(statusCode.GetReasonPhrase(responseMessage))
         {
@@ -48,7 +44,7 @@ namespace FubarDev.WebDavServer
         }
 
         /// <summary>
-        /// Gets the WebDAV status code
+        /// Gets the WebDAV status code.
         /// </summary>
         public WebDavStatusCode StatusCode { get; }
     }

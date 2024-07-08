@@ -3,28 +3,27 @@
 // </copyright>
 
 using System;
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 
 using FubarDev.WebDavServer.FileSystem;
 
-using JetBrains.Annotations;
-
 namespace FubarDev.WebDavServer.Engines.Remote
 {
     /// <summary>
-    /// The <see cref="ITargetActions{TCollection,TDocument,TMissing}"/> implementation that copies entries between servers
+    /// The <see cref="ITargetActions{TCollection,TDocument,TMissing}"/> implementation that copies entries between servers.
     /// </summary>
     public class CopyRemoteHttpClientTargetActions : RemoteHttpClientTargetActions, IRemoteCopyTargetActions
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="CopyRemoteHttpClientTargetActions"/> class.
         /// </summary>
-        /// <param name="dispatcher">The WebDAV dispatcher</param>
-        /// <param name="httpClient">The <see cref="HttpClient"/> to use</param>
-        public CopyRemoteHttpClientTargetActions([NotNull] IWebDavDispatcher dispatcher, [NotNull] HttpClient httpClient)
-            : base(dispatcher, httpClient)
+        /// <param name="context">The current WebDAV context.</param>
+        /// <param name="httpClient">The <see cref="HttpClient"/> to use.</param>
+        public CopyRemoteHttpClientTargetActions(IWebDavContext context, HttpClient httpClient)
+            : base(context, httpClient)
         {
         }
 
@@ -82,9 +81,13 @@ namespace FubarDev.WebDavServer.Engines.Remote
         }
 
         /// <inheritdoc />
-        public override Task ExecuteAsync(ICollection source, RemoteCollectionTarget destination, CancellationToken cancellationToken)
+        public override Task CleanupAsync(
+            ICollection source,
+            RemoteCollectionTarget destination,
+            IEnumerable<ActionResult> childResults,
+            CancellationToken cancellationToken)
         {
-            return Task.FromResult(0);
+            return Task.CompletedTask;
         }
     }
 }

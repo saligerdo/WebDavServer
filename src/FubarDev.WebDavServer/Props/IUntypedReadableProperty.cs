@@ -6,8 +6,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 
-using JetBrains.Annotations;
-
 namespace FubarDev.WebDavServer.Props
 {
     /// <summary>
@@ -16,17 +14,15 @@ namespace FubarDev.WebDavServer.Props
     public interface IUntypedReadableProperty : IProperty
     {
         /// <summary>
-        /// Gets the cost of reading the property value
+        /// Gets the cost of reading the property value.
         /// </summary>
         int Cost { get; }
 
         /// <summary>
-        /// Gets the <see cref="XElement"/> for this property
+        /// Gets the <see cref="XElement"/> for this property.
         /// </summary>
-        /// <param name="ct">The cancellation token</param>
-        /// <returns>The <see cref="XElement"/> for this property</returns>
-        [NotNull]
-        [ItemNotNull]
+        /// <param name="ct">The cancellation token.</param>
+        /// <returns>The <see cref="XElement"/> for this property.</returns>
         Task<XElement> GetXmlValueAsync(CancellationToken ct);
     }
 }

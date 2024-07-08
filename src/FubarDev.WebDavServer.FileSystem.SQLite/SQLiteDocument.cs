@@ -8,28 +8,26 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
-using FubarDev.WebDavServer.Model;
-
-using JetBrains.Annotations;
+using FubarDev.WebDavServer.Utils;
 
 using SQLitePCL;
 
 namespace FubarDev.WebDavServer.FileSystem.SQLite
 {
     /// <summary>
-    /// A <see cref="SQLitePCL"/> based implementation of a WebDAV document
+    /// A <see cref="SQLitePCL"/> based implementation of a WebDAV document.
     /// </summary>
     internal class SQLiteDocument : SQLiteEntry, IDocument
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="SQLiteDocument"/> class.
         /// </summary>
-        /// <param name="fileSystem">The file system this document belongs to</param>
-        /// <param name="parent">The parent collection</param>
-        /// <param name="info">The file information</param>
-        /// <param name="path">The root-relative path of this document</param>
-        public SQLiteDocument(SQLiteFileSystem fileSystem, ICollection parent, FileEntry info, Uri path)
-            : base(fileSystem, parent, info, path, null)
+        /// <param name="dbFileSystem">The file system this document belongs to.</param>
+        /// <param name="parent">The parent collection.</param>
+        /// <param name="info">The file information.</param>
+        /// <param name="path">The root-relative path of this document.</param>
+        public SQLiteDocument(SQLiteFileSystem dbFileSystem, ICollection parent, FileEntry info, Uri path)
+            : base(dbFileSystem, parent, info, path, null)
         {
         }
 
@@ -43,7 +41,9 @@ namespace FubarDev.WebDavServer.FileSystem.SQLite
                 .ExecuteQuery<RowIdTemp>()
                 .FirstOrDefault();
             if (result == null)
+            {
                 return Task.FromResult<Stream>(new MemoryStream());
+            }
 
             sqlite3_blob blob;
             var rc = raw.sqlite3_blob_open(
@@ -55,7 +55,9 @@ namespace FubarDev.WebDavServer.FileSystem.SQLite
                 0,
                 out blob);
             if (rc != 0)
+            {
                 throw new SQLiteFileSystemException(Connection.Handle);
+            }
 
             var stream = new SQLiteBlobReadStream(Connection.Handle, blob);
             return Task.FromResult<Stream>(stream);
@@ -65,6 +67,26 @@ namespace FubarDev.WebDavServer.FileSystem.SQLite
         public Task<Stream> CreateAsync(CancellationToken cancellationToken)
         {
             return Task.FromResult<Stream>(new SQLiteBlobWriteStream(Connection, Info));
+        }
+
+        /// <inheritdoc />
+        public async Task<Stream> OpenWriteAsync(long position, CancellationToken cancellationToken)
+        {
+            using var temp = new MemoryStream();
+
+            // Get the current data
+            using (var current = await OpenReadAsync(cancellationToken))
+            {
+                await current.CopyToAsync(temp, SystemInfo.CopyBufferSize, cancellationToken);
+            }
+
+            // Copy to the write-only stream
+            temp.Position = 0;
+            var stream = new SQLiteBlobWriteStream(Connection, Info, true);
+            await temp.CopyToAsync(stream, SystemInfo.CopyBufferSize, cancellationToken);
+
+            stream.Position = position;
+            return stream;
         }
 
         /// <inheritdoc />
@@ -94,7 +116,7 @@ namespace FubarDev.WebDavServer.FileSystem.SQLite
             {
                 Id = targetId,
                 Name = name,
-                Path = collection.Path.OriginalString,
+                Path = collection.Path.OriginalString.ToLowerInvariant(),
                 CreationTimeUtc = Info.CreationTimeUtc,
                 LastWriteTimeUtc = Info.LastWriteTimeUtc,
                 ETag = Info.ETag,
@@ -112,7 +134,7 @@ namespace FubarDev.WebDavServer.FileSystem.SQLite
                     .ExecuteNonQuery();
             });
 
-            var doc = new SQLiteDocument(dir.SQLiteFileSystem, dir, targetEntry, dir.Path.Append(name, false));
+            var doc = new SQLiteDocument(dir.DbFileSystem, dir, targetEntry, dir.Path.Append(name, false));
 
             var sourcePropStore = FileSystem.PropertyStore;
             var destPropStore = collection.FileSystem.PropertyStore;
@@ -141,12 +163,8 @@ namespace FubarDev.WebDavServer.FileSystem.SQLite
         // ReSharper disable once ClassNeverInstantiated.Local
         private class RowIdTemp
         {
-            public long RowId
-            {
-                get;
-                [UsedImplicitly]
-                set;
-            }
+            // ReSharper disable once UnusedAutoPropertyAccessor.Local
+            public long RowId { get; set; }
         }
     }
 }

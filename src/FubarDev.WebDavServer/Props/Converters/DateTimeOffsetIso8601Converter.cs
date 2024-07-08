@@ -7,12 +7,10 @@ using System.Globalization;
 using System.Text;
 using System.Xml.Linq;
 
-using JetBrains.Annotations;
-
 namespace FubarDev.WebDavServer.Props.Converters
 {
     /// <summary>
-    /// Converts a <see cref="DateTimeOffset"/> to/from a timestamp in ISO-8601 format.
+    /// Conversion between a <see cref="DateTimeOffset"/> and an ISO-8601 formatted date.
     /// </summary>
     public class DateTimeOffsetIso8601Converter : IPropertyConverter<DateTimeOffset>
     {
@@ -20,15 +18,17 @@ namespace FubarDev.WebDavServer.Props.Converters
         private static readonly char[] _timeZoneSeparators = { '+', '-', 'Z', 'z' };
 
         /// <summary>
-        /// Parses a string as a ISO 8601 date
+        /// Parses a string as a ISO 8601 date.
         /// </summary>
-        /// <param name="s">The string to parse</param>
-        /// <returns>The parsed date</returns>
-        public static DateTimeOffset Parse([NotNull] string s)
+        /// <param name="s">The string to parse.</param>
+        /// <returns>The parsed date.</returns>
+        public static DateTimeOffset Parse(string s)
         {
             var dateTimeSeparatorIndex = s.IndexOfAny(_dateTimeSeparators);
             if (dateTimeSeparatorIndex == -1)
+            {
                 throw new FormatException($"{s} is not a valid ISO 8601 format (no recognized date/time separator)");
+            }
 
             var datePart = s.Substring(0, dateTimeSeparatorIndex);
             var timeWithTimeZonePart = s.Substring(dateTimeSeparatorIndex + 1);
@@ -67,7 +67,9 @@ namespace FubarDev.WebDavServer.Props.Converters
         public XElement ToElement(XName name, DateTimeOffset value)
         {
             if (value == DateTimeOffset.MinValue)
+            {
                 return new XElement(name);
+            }
 
             var format = new StringBuilder("yyyy'-'MM'-'dd'T'HH':'mm':'ss");
             if (value.Millisecond != 0)

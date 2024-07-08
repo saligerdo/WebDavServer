@@ -18,7 +18,14 @@ namespace FubarDev.WebDavServer.Tests.Support.ServiceBuilders
         {
             var serviceCollection = new ServiceCollection();
             serviceCollection.AddOptions();
-            serviceCollection.AddLogging();
+            serviceCollection.AddLogging(
+                loggerBuilder =>
+                {
+                    loggerBuilder
+                        .AddDebug()
+                        .SetMinimumLevel(LogLevel.Trace);
+                });
+            serviceCollection.AddSingleton<IWebDavContextAccessor, TestWebDavContextAccessor>();
             serviceCollection.AddScoped<ISystemClock, TestSystemClock>();
             serviceCollection.Configure<InMemoryLockManagerOptions>(opt =>
             {
@@ -27,9 +34,6 @@ namespace FubarDev.WebDavServer.Tests.Support.ServiceBuilders
             serviceCollection.AddTransient<ILockCleanupTask, LockCleanupTask>();
             serviceCollection.AddTransient<ILockManager, InMemoryLockManager>();
             ServiceProvider = serviceCollection.BuildServiceProvider();
-
-            var loggerFactory = ServiceProvider.GetRequiredService<ILoggerFactory>();
-            loggerFactory.AddDebug(LogLevel.Trace);
         }
 
         public IServiceProvider ServiceProvider { get; }

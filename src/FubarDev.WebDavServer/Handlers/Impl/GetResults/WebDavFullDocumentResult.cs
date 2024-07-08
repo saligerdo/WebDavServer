@@ -11,24 +11,23 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using FubarDev.WebDavServer.FileSystem;
-using FubarDev.WebDavServer.Model;
+using FubarDev.WebDavServer.Models;
 using FubarDev.WebDavServer.Props;
 using FubarDev.WebDavServer.Props.Dead;
 using FubarDev.WebDavServer.Props.Live;
 using FubarDev.WebDavServer.Utils;
 
-using JetBrains.Annotations;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace FubarDev.WebDavServer.Handlers.Impl.GetResults
 {
     internal class WebDavFullDocumentResult : WebDavResult
     {
-        [NotNull]
         private readonly IDocument _document;
 
         private readonly bool _returnFile;
 
-        public WebDavFullDocumentResult([NotNull] IDocument document, bool returnFile)
+        public WebDavFullDocumentResult(IDocument document, bool returnFile)
             : base(WebDavStatusCode.OK)
         {
             _document = document;
@@ -40,10 +39,15 @@ namespace FubarDev.WebDavServer.Handlers.Impl.GetResults
             await base.ExecuteResultAsync(response, ct).ConfigureAwait(false);
 
             if (_document.FileSystem.SupportsRangedRead)
+            {
                 response.Headers["Accept-Ranges"] = new[] { "bytes" };
+            }
 
-            var properties = await _document.GetProperties(response.Dispatcher).ToList(ct).ConfigureAwait(false);
-            var etagProperty = properties.OfType<GetETagProperty>().FirstOrDefault();
+            var deadPropertyFactory = response.Context.RequestServices.GetRequiredService<IDeadPropertyFactory>();
+            var properties = await _document.GetProperties(deadPropertyFactory).ToListAsync(ct).ConfigureAwait(false);
+            var etagProperty = properties
+                .OfType<ITypedReadableProperty<EntityTag>>()
+                .FirstOrDefault(x => x.Name == GetETagProperty.PropertyName);
             if (etagProperty != null)
             {
                 var propValue = await etagProperty.GetValueAsync(ct).ConfigureAwait(false);
@@ -78,13 +82,13 @@ namespace FubarDev.WebDavServer.Handlers.Impl.GetResults
                     // Use the CopyToAsync function of the stream itself, because
                     // we're able to pass the cancellation token. This is a workaround
                     // for issue dotnet/corefx#9071 and fixes FubarDevelopment/WebDavServer#47.
-                    await stream.CopyToAsync(response.Body, 81920, ct)
+                    await stream.CopyToAsync(response.Body, SystemInfo.CopyBufferSize, ct)
                         .ConfigureAwait(false);
                 }
             }
         }
 
-        private async Task SetPropertiesToContentHeaderAsync([NotNull] HttpContent content, [NotNull][ItemNotNull] IReadOnlyCollection<IUntypedReadableProperty> properties, CancellationToken ct)
+        private async Task SetPropertiesToContentHeaderAsync(HttpContent content, IReadOnlyCollection<IUntypedReadableProperty> properties, CancellationToken ct)
         {
             var lastModifiedProp = properties.OfType<LastModifiedProperty>().FirstOrDefault();
             if (lastModifiedProp != null)
@@ -97,8 +101,10 @@ namespace FubarDev.WebDavServer.Handlers.Impl.GetResults
             if (contentLanguageProp != null)
             {
                 var propValue = await contentLanguageProp.TryGetValueAsync(ct).ConfigureAwait(false);
-                if (propValue.Item1)
-                    content.Headers.ContentLanguage.Add(propValue.Item2);
+                if (propValue.WasSet)
+                {
+                    content.Headers.ContentLanguage.Add(propValue.Value);
+                }
             }
 
             string contentType;

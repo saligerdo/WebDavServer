@@ -4,50 +4,44 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Threading;
 
-using FubarDev.WebDavServer.Model.Headers;
-
-using JetBrains.Annotations;
+using FubarDev.WebDavServer.Models;
 
 using Microsoft.Extensions.Logging;
 
 namespace FubarDev.WebDavServer.Locking
 {
     /// <summary>
-    /// A background task that removes expired locks
+    /// A background task that removes expired locks.
     /// </summary>
+    [SuppressMessage("ReSharper", "InconsistentlySynchronizedField", Justification = "It works!")]
     public class LockCleanupTask : ILockCleanupTask, IDisposable
     {
         private static readonly TimeSpan _deactivated = TimeSpan.FromMilliseconds(-1);
 
-        [NotNull]
         private readonly ISystemClock _systemClock;
 
-        [NotNull]
         private readonly MultiValueDictionary<DateTime, ActiveLockItem> _activeLocks = new MultiValueDictionary<DateTime, ActiveLockItem>();
 
-        [NotNull]
         private readonly object _syncRoot = new object();
 
-        [NotNull]
         private readonly Timer _timer;
 
-        [NotNull]
-        private readonly ILogger<LockCleanupTask> _logger;
+        private readonly ILogger<LockCleanupTask>? _logger;
 
-        [CanBeNull]
-        private ActiveLockItem _mostRecentExpirationLockItem;
+        private ActiveLockItem? _mostRecentExpirationLockItem;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="LockCleanupTask"/> class.
         /// </summary>
-        /// <param name="systemClock">The system clock</param>
-        /// <param name="logger">The logger for the cleanup task</param>
+        /// <param name="systemClock">The system clock.</param>
+        /// <param name="logger">The logger for the cleanup task.</param>
         public LockCleanupTask(
-            [NotNull] ISystemClock systemClock,
-            [NotNull] ILogger<LockCleanupTask> logger)
+            ISystemClock systemClock,
+            ILogger<LockCleanupTask>? logger)
         {
             _systemClock = systemClock;
             _logger = logger;
@@ -58,15 +52,19 @@ namespace FubarDev.WebDavServer.Locking
         /// Adds a lock to be tracked by this cleanup task.
         /// </summary>
         /// <param name="lockManager">The lock manager that created this active lock.</param>
-        /// <param name="activeLock">The active lock to track</param>
+        /// <param name="activeLock">The active lock to track.</param>
         public void Add(ILockManager lockManager, IActiveLock activeLock)
         {
-            if (_logger.IsEnabled(LogLevel.Trace))
-                _logger.LogTrace($"Adding lock {activeLock}");
+            if (_logger?.IsEnabled(LogLevel.Trace) ?? false)
+            {
+                _logger?.LogTrace("Adding lock {ActiveLock}", activeLock);
+            }
 
             // Don't track locks with infinite timeout
             if (activeLock.Timeout == TimeoutHeader.Infinite)
+            {
                 return;
+            }
 
             lock (_syncRoot)
             {
@@ -76,8 +74,13 @@ namespace FubarDev.WebDavServer.Locking
                     && newLockItem.Expiration >= _mostRecentExpirationLockItem.Expiration)
                 {
                     // New item is not the most recent to expire
-                    if (_logger.IsEnabled(LogLevel.Debug))
-                        _logger.LogDebug($"New lock {activeLock.StateToken} item is not the most recent item");
+                    if (_logger?.IsEnabled(LogLevel.Debug) ?? false)
+                    {
+                        _logger?.LogDebug(
+                            "New lock {StateToken} item is not the most recent item",
+                            activeLock.StateToken);
+                    }
+
                     return;
                 }
 
@@ -89,11 +92,25 @@ namespace FubarDev.WebDavServer.Locking
         /// <summary>
         /// Removes the active lock so that it isn't tracked any more by this cleanup task.
         /// </summary>
-        /// <param name="activeLock">The active lock to remove</param>
+        /// <param name="activeLock">The active lock to remove.</param>
         public void Remove(IActiveLock activeLock)
         {
-            if (_logger.IsEnabled(LogLevel.Trace))
-                _logger.LogTrace($"Try removing lock {activeLock}");
+            if (activeLock.Timeout == TimeSpan.MaxValue)
+            {
+                if (_logger?.IsEnabled(LogLevel.Debug) ?? false)
+                {
+                    _logger?.LogDebug(
+                        "{StateToken} had infinite timeout - don't try to remove it",
+                        activeLock.StateToken);
+                }
+
+                return;
+            }
+
+            if (_logger?.IsEnabled(LogLevel.Trace) ?? false)
+            {
+                _logger?.LogTrace("Try removing lock {ActiveLock}", activeLock);
+            }
 
             lock (_syncRoot)
             {
@@ -101,8 +118,13 @@ namespace FubarDev.WebDavServer.Locking
                 if (!_activeLocks.TryGetValue(activeLock.Expiration, out lockItems))
                 {
                     // Lock item not found
-                    if (_logger.IsEnabled(LogLevel.Debug))
-                        _logger.LogDebug($"Lock {activeLock.StateToken} is not tracked any more.");
+                    if (_logger?.IsEnabled(LogLevel.Debug) ?? false)
+                    {
+                        _logger?.LogDebug(
+                            "Lock {StateToken} is not tracked any more",
+                            activeLock.StateToken);
+                    }
+
                     return;
                 }
 
@@ -112,8 +134,13 @@ namespace FubarDev.WebDavServer.Locking
                 if (lockItem == null)
                 {
                     // Lock item not found
-                    if (_logger.IsEnabled(LogLevel.Debug))
-                        _logger.LogDebug($"Lock {activeLock.StateToken} is not tracked any more.");
+                    if (_logger?.IsEnabled(LogLevel.Debug) ?? false)
+                    {
+                        _logger?.LogDebug(
+                            "Lock {StateToken} is not tracked any more",
+                            activeLock.StateToken);
+                    }
+
                     return;
                 }
 
@@ -129,9 +156,9 @@ namespace FubarDev.WebDavServer.Locking
                         // Found a new one and reconfigure timer
                         ConfigureTimer(_mostRecentExpirationLockItem);
                     }
-                    else if (_logger.IsEnabled(LogLevel.Debug))
+                    else if (_logger?.IsEnabled(LogLevel.Debug) ?? false)
                     {
-                        _logger.LogDebug("No more locks to cleanup.");
+                        _logger?.LogDebug("No more locks to cleanup");
                     }
                 }
             }
@@ -147,25 +174,30 @@ namespace FubarDev.WebDavServer.Locking
         /// The timer callback which removes an expired item
         /// </summary>
         /// <param name="state">The (unused) state</param>
-        private async void TimerExpirationCallback(object state)
+        private async void TimerExpirationCallback(object? state)
         {
             bool removeResult;
-            ActiveLockItem lockItem;
+            ActiveLockItem? lockItem;
             lock (_syncRoot)
             {
                 lockItem = _mostRecentExpirationLockItem;
                 var now = _systemClock.UtcNow;
 
-                if (_logger.IsEnabled(LogLevel.Trace))
-                    _logger.LogTrace($"Cleanup timer called at {now:O}");
+                if (_logger?.IsEnabled(LogLevel.Trace) ?? false)
+                {
+                    _logger?.LogTrace("Cleanup timer called at {Now:O}", now);
+                }
 
-                ActiveLockItem nextLockItem;
+                ActiveLockItem? nextLockItem;
 
                 // The lock item might be null because a different task might've removed it already
                 if (lockItem == null)
                 {
-                    if (_logger.IsEnabled(LogLevel.Debug))
-                        _logger.LogDebug("Lock was already removed (no lock found).");
+                    if (_logger?.IsEnabled(LogLevel.Debug) ?? false)
+                    {
+                        _logger?.LogDebug("Lock was already removed (no lock found)");
+                    }
+
                     removeResult = false;
                     nextLockItem = FindMostRecentExpirationItem();
                 }
@@ -173,15 +205,25 @@ namespace FubarDev.WebDavServer.Locking
                 {
                     // The expiration might be in the future, because this timer event might be one
                     // that belongs to an already removed item.
-                    if (_logger.IsEnabled(LogLevel.Debug))
-                        _logger.LogDebug($"Lock was already removed (different lock {lockItem.ActiveLock.StateToken} found).");
+                    if (_logger?.IsEnabled(LogLevel.Debug) ?? false)
+                    {
+                        _logger?.LogDebug(
+                            "Lock was already removed (different lock {StateToken} found)",
+                            lockItem.ActiveLock.StateToken);
+                    }
+
                     removeResult = false;
                     nextLockItem = _mostRecentExpirationLockItem;
                 }
                 else
                 {
-                    if (_logger.IsEnabled(LogLevel.Debug))
-                        _logger.LogDebug($"Lock {lockItem.ActiveLock.StateToken} will be removed.");
+                    if (_logger?.IsEnabled(LogLevel.Debug) ?? false)
+                    {
+                        _logger?.LogDebug(
+                            "Lock {StateToken} will be removed",
+                            lockItem.ActiveLock.StateToken);
+                    }
+
                     removeResult = _activeLocks.Remove(lockItem.Expiration, lockItem);
                     nextLockItem = FindMostRecentExpirationItem();
                 }
@@ -192,24 +234,29 @@ namespace FubarDev.WebDavServer.Locking
                     // There is another lock that needs to be tracked.
                     ConfigureTimer(_mostRecentExpirationLockItem);
                 }
-                else if (_logger.IsEnabled(LogLevel.Debug))
+                else if (_logger?.IsEnabled(LogLevel.Debug) ?? false)
                 {
-                    _logger.LogDebug("No more locks to cleanup.");
+                    _logger?.LogDebug("No more locks to cleanup");
                 }
             }
 
             // The remove might've failed because different task could've removed
             // it before the timer event could get its hands on it.
-            if (removeResult)
+            if (removeResult && lockItem != null)
             {
-                if (_logger.IsEnabled(LogLevel.Trace))
-                    _logger.LogTrace($"Lock {lockItem.ActiveLock.StateToken} will now be removed from the lock manager.");
+                if (_logger?.IsEnabled(LogLevel.Trace) ?? false)
+                {
+                    _logger.LogTrace(
+                        "Lock {StateToken} will now be removed from the lock manager",
+                        lockItem.ActiveLock.StateToken);
+                }
+
                 var stateToken = new Uri(lockItem.ActiveLock.StateToken, UriKind.RelativeOrAbsolute);
                 await lockItem.LockManager.ReleaseAsync(lockItem.ActiveLock.Path, stateToken, CancellationToken.None).ConfigureAwait(false);
             }
         }
 
-        private ActiveLockItem FindMostRecentExpirationItem()
+        private ActiveLockItem? FindMostRecentExpirationItem()
         {
             var mostRecentExpiration = _activeLocks.Keys.Select(x => (DateTime?)x).FirstOrDefault();
             if (mostRecentExpiration != null)
@@ -222,27 +269,41 @@ namespace FubarDev.WebDavServer.Locking
             return null;
         }
 
-        private void ConfigureTimer([NotNull] ActiveLockItem lockItem)
+        private void ConfigureTimer(ActiveLockItem lockItem)
         {
-            if (_logger.IsEnabled(LogLevel.Trace))
-                _logger.LogTrace($"Lock {lockItem.ActiveLock.StateToken} is the next to expire.");
+            if (_logger?.IsEnabled(LogLevel.Trace) ?? false)
+            {
+                _logger?.LogTrace(
+                    "Lock {StateToken} is the next to expire",
+                    lockItem.ActiveLock.StateToken);
+            }
 
             var remainingTime = lockItem.Expiration - _systemClock.UtcNow;
             if (remainingTime < TimeSpan.Zero)
                 remainingTime = TimeSpan.Zero;
 
-            if (_logger.IsEnabled(LogLevel.Debug))
-                _logger.LogDebug($"Locks {lockItem.ActiveLock.StateToken} remaining time is {remainingTime}.");
+            if (_logger?.IsEnabled(LogLevel.Debug) ?? false)
+            {
+                _logger?.LogDebug(
+                    "The remaining time of the lock {StateToken} is {RemainingTime}",
+                    lockItem.ActiveLock.StateToken,
+                    remainingTime);
+            }
 
-            if (_logger.IsEnabled(LogLevel.Debug))
-                _logger.LogDebug($"Lock {lockItem.ActiveLock.StateToken} is expected to expire at time {_systemClock.UtcNow + remainingTime:O}.");
+            if (_logger?.IsEnabled(LogLevel.Debug) ?? false)
+            {
+                _logger.LogDebug(
+                    "Lock {StateToken} is expected to expire at time {ExpirationTime:O}",
+                    lockItem.ActiveLock.StateToken,
+                    _systemClock.UtcNow + remainingTime);
+            }
 
             _timer.Change(remainingTime, _deactivated);
         }
 
         private class ActiveLockItem
         {
-            public ActiveLockItem([NotNull] ILockManager lockManager, [NotNull] IActiveLock activeLock)
+            public ActiveLockItem(ILockManager lockManager, IActiveLock activeLock)
             {
                 LockManager = lockManager;
                 ActiveLock = activeLock;
@@ -250,10 +311,8 @@ namespace FubarDev.WebDavServer.Locking
 
             public DateTime Expiration => ActiveLock.Expiration;
 
-            [NotNull]
             public ILockManager LockManager { get; }
 
-            [NotNull]
             public IActiveLock ActiveLock { get; }
         }
     }

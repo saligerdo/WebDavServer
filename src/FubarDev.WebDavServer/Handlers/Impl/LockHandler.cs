@@ -12,11 +12,8 @@ using System.Xml.Linq;
 
 using FubarDev.WebDavServer.FileSystem;
 using FubarDev.WebDavServer.Locking;
-using FubarDev.WebDavServer.Model;
-using FubarDev.WebDavServer.Model.Headers;
+using FubarDev.WebDavServer.Models;
 using FubarDev.WebDavServer.Utils;
-
-using JetBrains.Annotations;
 
 namespace FubarDev.WebDavServer.Handlers.Impl
 {
@@ -25,34 +22,34 @@ namespace FubarDev.WebDavServer.Handlers.Impl
     /// </summary>
     public class LockHandler : ILockHandler
     {
-        [NotNull]
         private readonly IFileSystem _rootFileSystem;
-
-        [CanBeNull]
-        private readonly ILockManager _lockManager;
-
-        [CanBeNull]
-        private readonly ITimeoutPolicy _timeoutPolicy;
-
-        [NotNull]
-        private readonly IWebDavContext _context;
-
+        private readonly IUriComparer _uriComparer;
+        private readonly ILockManager? _lockManager;
+        private readonly ITimeoutPolicy? _timeoutPolicy;
+        private readonly IWebDavContextAccessor _contextAccessor;
         private readonly bool _useAbsoluteHref = false;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="LockHandler"/> class.
         /// </summary>
-        /// <param name="context">The WebDAV request context</param>
-        /// <param name="rootFileSystem">The root file system</param>
-        /// <param name="lockManager">The lock manager</param>
-        /// <param name="timeoutPolicy">The timeout policy for the selection of the <see cref="TimeoutHeader"/> value</param>
-        public LockHandler([NotNull] IWebDavContext context, [NotNull] IFileSystem rootFileSystem, ILockManager lockManager = null, ITimeoutPolicy timeoutPolicy = null)
+        /// <param name="contextAccessor">The WebDAV request context accessor.</param>
+        /// <param name="rootFileSystem">The root file system.</param>
+        /// <param name="uriComparer">Comparer for URLs.</param>
+        /// <param name="lockManager">The lock manager.</param>
+        /// <param name="timeoutPolicy">The timeout policy for the selection of the <see cref="Models.TimeoutHeader"/> value.</param>
+        public LockHandler(
+            IWebDavContextAccessor contextAccessor,
+            IFileSystem rootFileSystem,
+            IUriComparer? uriComparer = null,
+            ILockManager? lockManager = null,
+            ITimeoutPolicy? timeoutPolicy = null)
         {
-            _context = context;
+            _contextAccessor = contextAccessor;
             _rootFileSystem = rootFileSystem;
+            _uriComparer = uriComparer ?? new DefaultUriComparer(contextAccessor);
             _lockManager = lockManager;
             _timeoutPolicy = timeoutPolicy;
-            HttpMethods = _lockManager == null ? new string[0] : new[] { "LOCK" };
+            HttpMethods = _lockManager == null ? Array.Empty<string>() : new[] { "LOCK" };
         }
 
         /// <inheritdoc />
@@ -62,36 +59,42 @@ namespace FubarDev.WebDavServer.Handlers.Impl
         public async Task<IWebDavResult> LockAsync(string path, lockinfo info, CancellationToken cancellationToken)
         {
             if (_lockManager == null)
+            {
                 throw new NotSupportedException();
+            }
 
-            var owner = info.owner;
-            var recursive = (_context.RequestHeaders.Depth ?? DepthHeader.Infinity) == DepthHeader.Infinity;
+            var context = _contextAccessor.WebDavContext;
+            var ownerHref = info.owner ?? context.User.Identity?.GetOwnerHref();
+            var recursive = (context.RequestHeaders.Depth ?? DepthHeader.Infinity) == DepthHeader.Infinity;
             var accessType = LockAccessType.Write;
             var shareType = info.lockscope.ItemElementName == ItemChoiceType.exclusive
                 ? LockShareMode.Exclusive
                 : LockShareMode.Shared;
             var timeout = _timeoutPolicy?.SelectTimeout(
-                              _context.RequestHeaders.Timeout?.Values ?? new[] { TimeoutHeader.Infinite })
+                              context.RequestHeaders.Timeout?.Values ?? new[] { TimeoutHeader.Infinite })
                           ?? TimeoutHeader.Infinite;
 
-            var href = GetHref(path);
+            var href = GetHref(context, path);
             var l = new Lock(
                 path,
                 href,
                 recursive,
-                owner,
+                context.User.Identity?.GetOwner(),
+                ownerHref,
                 accessType,
                 shareType,
                 timeout);
 
             Debug.Assert(_lockManager != null, "_lockManager != null");
             var lockResult = await _lockManager.LockAsync(l, cancellationToken).ConfigureAwait(false);
-            if (lockResult.ConflictingLocks != null)
+            if (!lockResult.IsSuccess)
             {
                 // Lock cannot be acquired
                 if (lockResult.ConflictingLocks.ChildLocks.Count == 0)
                 {
-                    return new WebDavResult<error>(WebDavStatusCode.Locked, CreateError(lockResult.ConflictingLocks.GetLocks()));
+                    return new WebDavResult<error>(
+                        WebDavStatusCode.Locked,
+                        CreateError(context, lockResult.ConflictingLocks.GetLocks()));
                 }
 
                 var errorResponses = new List<response>();
@@ -99,6 +102,7 @@ namespace FubarDev.WebDavServer.Handlers.Impl
                     || lockResult.ConflictingLocks.ReferenceLocks.Count != 0)
                 {
                     errorResponses.Add(CreateErrorResponse(
+                        context,
                         WebDavStatusCode.Forbidden,
                         lockResult.ConflictingLocks.ChildLocks.Concat(lockResult.ConflictingLocks.ReferenceLocks)));
                 }
@@ -106,19 +110,20 @@ namespace FubarDev.WebDavServer.Handlers.Impl
                 if (lockResult.ConflictingLocks.ParentLocks.Count != 0)
                 {
                     var errorResponse = CreateErrorResponse(
+                        context,
                         WebDavStatusCode.Forbidden,
                         lockResult.ConflictingLocks.ChildLocks);
-                    errorResponse.error = CreateError(new IActiveLock[0]);
+                    errorResponse.error = CreateError(context, Array.Empty<IActiveLock>());
                     errorResponses.Add(errorResponse);
                 }
 
                 errorResponses.Add(new response()
                 {
-                    href = GetHref(l.Path),
+                    href = GetHref(context, l.Path),
                     ItemsElementName = new[] { ItemsChoiceType2.status, },
                     Items = new object[]
                     {
-                        new Status(_context.RequestProtocol, WebDavStatusCode.FailedDependency).ToString(),
+                        new Status(context.RequestProtocol, WebDavStatusCode.FailedDependency).ToString(),
                     },
                 });
 
@@ -139,11 +144,15 @@ namespace FubarDev.WebDavServer.Handlers.Impl
                 WebDavStatusCode statusCode;
                 if (selectionResult.IsMissing)
                 {
-                    if (_context.RequestHeaders.IfNoneMatch != null)
+                    if (context.RequestHeaders.IfNoneMatch != null)
+                    {
                         throw new WebDavException(WebDavStatusCode.PreconditionFailed);
+                    }
 
                     if (selectionResult.MissingNames.Count > 1)
+                    {
                         return new WebDavResult(WebDavStatusCode.Conflict);
+                    }
 
                     var current = selectionResult.Collection;
                     var docName = selectionResult.MissingNames.Single();
@@ -152,7 +161,7 @@ namespace FubarDev.WebDavServer.Handlers.Impl
                 }
                 else
                 {
-                    await _context
+                    await context
                         .RequestHeaders.ValidateAsync(selectionResult.TargetEntry, cancellationToken)
                         .ConfigureAwait(false);
 
@@ -164,8 +173,16 @@ namespace FubarDev.WebDavServer.Handlers.Impl
                 {
                     Any = new[] { new XElement(WebDavXml.Dav + "lockdiscovery", activeLockXml) },
                 };
-                var webDavResult = new WebDavResult<prop>(statusCode, result);
-                webDavResult.Headers["Lock-Token"] = new[] { new LockTokenHeader(new Uri(activeLock.StateToken)).ToString() };
+                var webDavResult = new WebDavResult<prop>(statusCode, result)
+                {
+                    Headers =
+                    {
+                        ["Lock-Token"] = new[]
+                        {
+                            new LockTokenHeader(new Uri(activeLock.StateToken)).ToString(),
+                        },
+                    },
+                };
                 return webDavResult;
             }
             catch
@@ -178,21 +195,42 @@ namespace FubarDev.WebDavServer.Handlers.Impl
         }
 
         /// <inheritdoc />
-        public async Task<IWebDavResult> RefreshLockAsync(string path, IfHeader ifHeader, TimeoutHeader timeoutHeader, CancellationToken cancellationToken)
+        public async Task<IWebDavResult> RefreshLockAsync(string path, IfHeader ifHeader, TimeoutHeader? timeoutHeader, CancellationToken cancellationToken)
         {
             if (_lockManager == null)
+            {
                 throw new NotSupportedException();
+            }
 
-            if (ifHeader.Lists.Any(x => x.Path.IsAbsoluteUri))
-                throw new InvalidOperationException("A Resource-Tag pointing to a different server or application isn't supported.");
+            if (ifHeader.IsTaggedList)
+            {
+                if (ifHeader.TaggedLists.All(taggedList => _uriComparer.IsThisServer(taggedList.ResourceTag)))
+                {
+                    throw new InvalidOperationException("A Resource-Tag pointing to a different server or application isn't supported.");
+                }
+            }
 
             var timeout = _timeoutPolicy?.SelectTimeout(
                               timeoutHeader?.Values ?? new[] { TimeoutHeader.Infinite })
                           ?? TimeoutHeader.Infinite;
 
-            var result = await _lockManager.RefreshLockAsync(_rootFileSystem, ifHeader, timeout, cancellationToken).ConfigureAwait(false);
+            var pathInfo = await _rootFileSystem.SelectAsync(path, cancellationToken).ConfigureAwait(false);
+            if (pathInfo.IsMissing)
+            {
+                return new WebDavResult(WebDavStatusCode.NotFound);
+            }
+
+            var result = await _lockManager.RefreshLockAsync(
+                    _rootFileSystem,
+                    path,
+                    ifHeader,
+                    timeout,
+                    cancellationToken)
+                .ConfigureAwait(false);
             if (result.ErrorResponse != null)
+            {
                 return new WebDavResult<error>(WebDavStatusCode.PreconditionFailed, result.ErrorResponse.error);
+            }
 
             Debug.Assert(result.RefreshedLocks != null, "result.RefreshedLocks != null");
             var prop = new prop()
@@ -203,7 +241,7 @@ namespace FubarDev.WebDavServer.Handlers.Impl
             return new WebDavResult<prop>(WebDavStatusCode.OK, prop);
         }
 
-        private error CreateError(IEnumerable<IActiveLock> activeLocks)
+        private error CreateError(IWebDavContext context, IEnumerable<IActiveLock> activeLocks)
         {
             return new error()
             {
@@ -212,21 +250,24 @@ namespace FubarDev.WebDavServer.Handlers.Impl
                 {
                     new errorNoconflictinglock()
                     {
-                        href = GetHrefs(activeLocks),
+                        href = GetHrefs(context, activeLocks),
                     },
                 },
             };
         }
 
-        private response CreateErrorResponse(WebDavStatusCode statusCode, IEnumerable<IActiveLock> activeLocks)
+        private response CreateErrorResponse(
+            IWebDavContext context,
+            WebDavStatusCode statusCode,
+            IEnumerable<IActiveLock> activeLocks)
         {
-            var hrefs = GetHrefs(activeLocks);
+            var hrefs = GetHrefs(context, activeLocks);
             var choices = hrefs.Skip(1)
                 .Select(x => Tuple.Create(ItemsChoiceType2.href, x))
                 .ToList();
             choices.Add(Tuple.Create(
                 ItemsChoiceType2.status,
-                new Status(_context.RequestProtocol, statusCode).ToString()));
+                new Status(context.RequestProtocol, statusCode).ToString()));
             var response = new response()
             {
                 href = hrefs.FirstOrDefault(),
@@ -237,17 +278,20 @@ namespace FubarDev.WebDavServer.Handlers.Impl
             return response;
         }
 
-        private string[] GetHrefs(IEnumerable<IActiveLock> activeLocks)
+        private string[] GetHrefs(IWebDavContext context, IEnumerable<IActiveLock> activeLocks)
         {
-            return activeLocks.Select(x => GetHref(x.Path)).ToArray();
+            return activeLocks.Select(x => GetHref(context, x.Path)).ToArray();
         }
 
-        private string GetHref(string path)
+        private string GetHref(IWebDavContext context, string path)
         {
-            var href = _context.PublicControllerUrl.Append(path, true);
+            var href = context.PublicControllerUrl.Append(path, true);
             if (!_useAbsoluteHref)
-                return "/" + _context.PublicRootUrl.MakeRelativeUri(href).OriginalString;
-            return href.OriginalString;
+            {
+                return "/" + context.PublicRootUrl.GetRelativeUrl(href).OriginalString;
+            }
+
+            return href.ToString();
         }
     }
 }

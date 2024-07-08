@@ -3,8 +3,6 @@
 // </copyright>
 
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Security.Principal;
 
 using FubarDev.WebDavServer.Utils.UAParser;
@@ -18,50 +16,64 @@ namespace FubarDev.WebDavServer.Tests.Support
     {
         private readonly Lazy<Uri> _absoluteRequestUrl;
 
+        private readonly Lazy<Uri> _hrefUrl;
+
         private readonly Lazy<Uri> _relativeRequestUrl;
 
         private readonly Lazy<WebDavRequestHeaders> _requestHeaders;
 
         private readonly Lazy<IWebDavDispatcher> _dispatcher;
 
-        public TestHost(IServiceProvider serviceProvider, Uri baseUrl)
+        private readonly Lazy<string?> _httpMethod;
+
+        private IPrincipal? _user;
+
+        public TestHost(IServiceProvider serviceProvider, Uri baseUrl, string? httpMethod)
         {
+            RequestServices = serviceProvider;
+            _httpMethod = new Lazy<string?>(() => httpMethod);
             PublicBaseUrl = baseUrl;
             PublicRootUrl = new Uri(baseUrl, "/");
             RequestProtocol = "HTTP/1.1";
             _absoluteRequestUrl = new Lazy<Uri>(() => PublicRootUrl);
+            _hrefUrl = new Lazy<Uri>(() => new Uri(_absoluteRequestUrl.Value.AbsolutePath, UriKind.RelativeOrAbsolute));
             _relativeRequestUrl = new Lazy<Uri>(() =>
             {
-                var requestUrl = PublicRootUrl.MakeRelativeUri(baseUrl);
+                var requestUrl = PublicRootUrl.GetRelativeUrl(baseUrl);
                 if (!requestUrl.OriginalString.StartsWith("/"))
                     return new Uri("/" + requestUrl.OriginalString, UriKind.Relative);
                 return requestUrl;
             });
-            _requestHeaders = new Lazy<WebDavRequestHeaders>(() => new WebDavRequestHeaders(new List<KeyValuePair<string, IEnumerable<string>>>(), this));
+            _requestHeaders = new Lazy<WebDavRequestHeaders>(
+                () => new WebDavRequestHeaders(new HeaderDictionary()));
             _dispatcher = new Lazy<IWebDavDispatcher>(serviceProvider.GetRequiredService<IWebDavDispatcher>);
         }
 
         public TestHost(IServiceProvider serviceProvider, Uri baseUrl, IHttpContextAccessor httpContextAccessor)
         {
+            RequestServices = serviceProvider;
+            _httpMethod = new Lazy<string?>(() => httpContextAccessor.HttpContext!.Request.Method);
             PublicBaseUrl = baseUrl;
             PublicRootUrl = new Uri(baseUrl, "/");
             RequestProtocol = "HTTP/1.1";
-            _absoluteRequestUrl = new Lazy<Uri>(() => new Uri(PublicRootUrl, httpContextAccessor.HttpContext.Request.Path.ToUriComponent()));
+            _absoluteRequestUrl = new Lazy<Uri>(() => new Uri(PublicRootUrl, httpContextAccessor.HttpContext!.Request.Path.ToUriComponent()));
+            _hrefUrl = new Lazy<Uri>(() => new Uri(_absoluteRequestUrl.Value.AbsolutePath, UriKind.RelativeOrAbsolute));
             _relativeRequestUrl = new Lazy<Uri>(() =>
             {
-                var requestUrl = httpContextAccessor.HttpContext.Request.Path.ToUriComponent();
+                var requestUrl = httpContextAccessor.HttpContext!.Request.Path.ToUriComponent();
                 if (!requestUrl.StartsWith("/"))
                     requestUrl = "/" + requestUrl;
                 return new Uri(requestUrl, UriKind.Relative);
             });
             _requestHeaders = new Lazy<WebDavRequestHeaders>(() =>
             {
-                var request = httpContextAccessor.HttpContext.Request;
-                var headerItems = request.Headers.Select(x => new KeyValuePair<string, IEnumerable<string>>(x.Key, x.Value));
-                return new WebDavRequestHeaders(headerItems, this);
+                var request = httpContextAccessor.HttpContext!.Request;
+                return new WebDavRequestHeaders(request.Headers);
             });
             _dispatcher = new Lazy<IWebDavDispatcher>(serviceProvider.GetRequiredService<IWebDavDispatcher>);
         }
+
+        public IServiceProvider RequestServices { get; }
 
         public string RequestProtocol { get; }
 
@@ -77,6 +89,9 @@ namespace FubarDev.WebDavServer.Tests.Support
 
         public Uri ActionUrl => PublicRelativeRequestUrl;
 
+        /// <inheritdoc />
+        public Uri HrefUrl => _hrefUrl.Value;
+
         public Uri PublicRelativeRequestUrl => _relativeRequestUrl.Value;
 
         public Uri PublicAbsoluteRequestUrl => _absoluteRequestUrl.Value;
@@ -91,8 +106,19 @@ namespace FubarDev.WebDavServer.Tests.Support
 
         public IWebDavRequestHeaders RequestHeaders => _requestHeaders.Value;
 
-        public IPrincipal User { get; } = new GenericPrincipal(new GenericIdentity("anonymous"), new string[0]);
+        public IPrincipal User
+        {
+            get => _user ??= CreateAnonymous();
+            set => _user = value;
+        }
 
         public IWebDavDispatcher Dispatcher => _dispatcher.Value;
+
+        public string RequestMethod => _httpMethod.Value ?? throw new InvalidOperationException();
+
+        private static IPrincipal CreateAnonymous()
+        {
+            return new GenericPrincipal(new GenericIdentity("anonymous"), Array.Empty<string>());
+        }
     }
 }

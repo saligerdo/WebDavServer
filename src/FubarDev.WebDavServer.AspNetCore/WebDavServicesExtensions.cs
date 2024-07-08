@@ -2,11 +2,12 @@
 // Copyright (c) Fubar Development Junker. All rights reserved.
 // </copyright>
 
+using System;
+
 using FubarDev.WebDavServer;
 using FubarDev.WebDavServer.AspNetCore;
-using FubarDev.WebDavServer.AspNetCore.Filters;
-using FubarDev.WebDavServer.AspNetCore.Filters.Internal;
 using FubarDev.WebDavServer.AspNetCore.Formatters.Internal;
+using FubarDev.WebDavServer.BufferPools;
 using FubarDev.WebDavServer.Dispatchers;
 using FubarDev.WebDavServer.Engines.Remote;
 using FubarDev.WebDavServer.FileSystem;
@@ -27,7 +28,7 @@ using Microsoft.Extensions.Options;
 namespace Microsoft.Extensions.DependencyInjection
 {
     /// <summary>
-    /// Extensions for the <see cref="IServiceCollection"/>
+    /// Extensions for the <see cref="IServiceCollection"/>.
     /// </summary>
     public static class WebDavServicesExtensions
     {
@@ -35,7 +36,7 @@ namespace Microsoft.Extensions.DependencyInjection
         /// Adds the WebDAV services that are essential to run a WebDAV server.
         /// </summary>
         /// <remarks>
-        /// The user must still add the following services:
+        /// The user must still add the following services.
         /// <list type="bullet">
         /// <item>
         ///     <term><see cref="IFileSystemFactory"/></term>
@@ -51,36 +52,71 @@ namespace Microsoft.Extensions.DependencyInjection
         /// </item>
         /// </list>
         /// </remarks>
-        /// <param name="services">The service collection to add the WebDAV services to</param>
-        /// <returns>the <paramref name="services"/></returns>
-        public static IServiceCollection AddWebDav(this IServiceCollection services)
+        /// <param name="services">The service collection to add the WebDAV services to.</param>
+        /// <param name="configureOptions">WebDAV server options to configure.</param>
+        /// <returns>the <paramref name="services"/>.</returns>
+        public static IServiceCollection AddWebDav(
+            this IServiceCollection services,
+            Action<WebDavServerOptions>? configureOptions = null)
         {
+            var options = new WebDavServerOptions();
+            if (configureOptions != null)
+            {
+                configureOptions(options);
+                services.Configure(configureOptions);
+            }
+
+            services.TryAddScoped<IImplicitLockFactory, DefaultImplicitLockFactory>();
             services.TryAddEnumerable(ServiceDescriptor.Transient<IConfigureOptions<MvcOptions>, WebDavXmlSerializerMvcOptionsSetup>());
-            services.TryAddEnumerable(ServiceDescriptor.Transient<IConfigureOptions<MvcOptions>, WebDavExceptionFilterMvcOptionsSetup>());
             services.TryAddSingleton<IHttpContextAccessor, HttpContextAccessor>();
-            services.TryAddScoped<IDeadPropertyFactory, DeadPropertyFactory>();
+            services.TryAddSingleton<IDeadPropertyFactory, DeadPropertyFactory>();
             services.TryAddScoped<IRemoteCopyTargetActionsFactory, DefaultRemoteTargetActionsFactory>();
             services.TryAddScoped<IRemoteMoveTargetActionsFactory, DefaultRemoteTargetActionsFactory>();
             services.TryAddSingleton<IHttpMessageHandlerFactory, DefaultHttpMessageHandlerFactory>();
             services.TryAddSingleton<ISystemClock, SystemClock>();
             services.TryAddSingleton<ITimeoutPolicy, DefaultTimeoutPolicy>();
-            services.TryAddScoped<IWebDavContext, WebDavContext>();
-            services.TryAddSingleton<ILockCleanupTask, LockCleanupTask>();
+            services.TryAddSingleton<IWebDavContextAccessor, WebDavContextAccessor>();
+            services.TryAddSingleton<IUriComparer, DefaultUriComparer>();
             services.TryAddSingleton<IPathTraversalEngine, PathTraversalEngine>();
             services.TryAddSingleton<IMimeTypeDetector, DefaultMimeTypeDetector>();
             services.TryAddSingleton<IEntryPropertyInitializer, DefaultEntryPropertyInitializer>();
+            services.TryAddSingleton<IBufferPoolFactory, ArrayPoolBufferPoolFactory>();
             services
                 .AddOptions()
+                .AddScoped(sp => sp.GetRequiredService<IWebDavContextAccessor>().WebDavContext)
                 .AddScoped<IWebDavDispatcher, WebDavServer>()
-                .AddSingleton<WebDavExceptionFilter>()
                 .AddScoped<IWebDavOutputFormatter, WebDavXmlOutputFormatter>()
-                .AddSingleton<LockCleanupTask>();
+                .AddSingleton<LockCleanupTask>()
+                .AddScoped(sp => sp.GetRequiredService<IBufferPoolFactory>().CreatePool());
+            services.Scan(
+                scan => scan
+                    .FromAssemblyOf<IWebDavClass>()
+                    .AddClasses(classes => classes.AssignableTo<IWebDavClass1>())
+                    .AsImplementedInterfaces()
+                    .WithScopedLifetime());
+            if (options.EnableClass2)
+            {
+                services.TryAddSingleton<ILockCleanupTask, LockCleanupTask>();
+                services.Scan(
+                    scan => scan
+                        .FromAssemblyOf<IWebDavClass>()
+                        .AddClasses(classes => classes.AssignableTo<IWebDavClass2>())
+                        .AsImplementedInterfaces()
+                        .WithScopedLifetime());
+            }
+
             services.Scan(
                 scan => scan
                     .FromAssemblyOf<IHandler>()
-                    .AddClasses(classes => classes.AssignableToAny(typeof(IHandler), typeof(IWebDavClass)))
+                    .AddClasses(classes => classes.AssignableToAny(typeof(IHandler)))
                     .AsImplementedInterfaces()
-                    .WithTransientLifetime());
+                    .WithScopedLifetime());
+            services.Scan(
+                scan => scan
+                    .FromAssemblyOf<IDefaultDeadPropertyFactory>()
+                    .AddClasses(classes => classes.AssignableToAny(typeof(IDefaultDeadPropertyFactory)))
+                    .AsImplementedInterfaces()
+                    .WithSingletonLifetime());
             services.AddScoped(
                 sp =>
                 {

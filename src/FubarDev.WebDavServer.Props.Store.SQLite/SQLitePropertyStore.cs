@@ -2,7 +2,6 @@
 // Copyright (c) Fubar Development Junker. All rights reserved.
 // </copyright>
 
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -10,10 +9,8 @@ using System.Threading.Tasks;
 using System.Xml.Linq;
 
 using FubarDev.WebDavServer.FileSystem;
-using FubarDev.WebDavServer.Model.Headers;
+using FubarDev.WebDavServer.Models;
 using FubarDev.WebDavServer.Props.Dead;
-
-using JetBrains.Annotations;
 
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -23,16 +20,14 @@ using sqlitenet = SQLite;
 namespace FubarDev.WebDavServer.Props.Store.SQLite
 {
     /// <summary>
-    /// The in-memory implementation of a property store
+    /// The in-memory implementation of a property store.
     /// </summary>
     public class SQLitePropertyStore : PropertyStoreBase, IFileSystemPropertyStore
     {
         internal const string PropDbFileName = ".properties.db";
 
-        [NotNull]
         private readonly ILogger<SQLitePropertyStore> _logger;
 
-        [NotNull]
         private readonly SQLitePropertyStoreOptions _options;
 
         private readonly sqlitenet.SQLiteConnection _connection;
@@ -40,14 +35,14 @@ namespace FubarDev.WebDavServer.Props.Store.SQLite
         /// <summary>
         /// Initializes a new instance of the <see cref="SQLitePropertyStore"/> class.
         /// </summary>
-        /// <param name="deadPropertyFactory">The factory to create dead properties</param>
-        /// <param name="dbFileName">The file name of the SQLite database</param>
-        /// <param name="options">The options for this property store</param>
-        /// <param name="logger">The logger</param>
-        public SQLitePropertyStore([NotNull] IDeadPropertyFactory deadPropertyFactory, [NotNull] string dbFileName, [CanBeNull] IOptions<SQLitePropertyStoreOptions> options, [NotNull] ILogger<SQLitePropertyStore> logger)
+        /// <param name="deadPropertyFactory">The factory to create dead properties.</param>
+        /// <param name="dbFileName">The file name of the SQLite database.</param>
+        /// <param name="options">The options for this property store.</param>
+        /// <param name="logger">The logger.</param>
+        public SQLitePropertyStore(IDeadPropertyFactory deadPropertyFactory, string dbFileName, IOptions<SQLitePropertyStoreOptions> options, ILogger<SQLitePropertyStore> logger)
             : base(deadPropertyFactory)
         {
-            _options = options?.Value ?? new SQLitePropertyStoreOptions();
+            _options = options.Value;
             _logger = logger;
             _connection = new sqlitenet.SQLiteConnection(dbFileName);
         }
@@ -78,7 +73,7 @@ namespace FubarDev.WebDavServer.Props.Store.SQLite
             {
                 if (element.Name == GetETagProperty.PropertyName)
                 {
-                    _logger.LogWarning("The ETag property must not be set using the property store.");
+                    _logger.LogWarning("The ETag property must not be set using the property store");
                     continue;
                 }
 
@@ -87,7 +82,7 @@ namespace FubarDev.WebDavServer.Props.Store.SQLite
 
             SetAll(entry, elementsToSet);
 
-            return Task.FromResult(0);
+            return Task.CompletedTask;
         }
 
         /// <inheritdoc />
@@ -103,7 +98,7 @@ namespace FubarDev.WebDavServer.Props.Store.SQLite
                     .ExecuteNonQuery();
             }
 
-            return Task.FromResult(0);
+            return Task.CompletedTask;
         }
 
         /// <inheritdoc />
@@ -114,13 +109,14 @@ namespace FubarDev.WebDavServer.Props.Store.SQLite
                 .ToDictionary(x => x.Name);
             foreach (var key in keys)
             {
-                XElement element;
-                if (!entries.TryGetValue(key, out element))
+                if (!entries.TryGetValue(key, out _))
+                {
                     continue;
+                }
 
                 if (key == GetETagProperty.PropertyName)
                 {
-                    _logger.LogWarning("The ETag property must not be set using the property store.");
+                    _logger.LogWarning("The ETag property must not be set using the property store");
                     result.Add(false);
                 }
                 else
@@ -204,7 +200,7 @@ namespace FubarDev.WebDavServer.Props.Store.SQLite
                     {
                         if (isEtagEntry && element.Name == GetETagProperty.PropertyName)
                         {
-                            _logger.LogWarning("The ETag property must not be set using the property store.");
+                            _logger.LogWarning("The ETag property must not be set using the property store");
                             continue;
                         }
 

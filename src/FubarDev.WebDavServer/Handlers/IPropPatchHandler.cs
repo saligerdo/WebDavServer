@@ -5,9 +5,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 
-using FubarDev.WebDavServer.Model;
-
-using JetBrains.Annotations;
+using FubarDev.WebDavServer.Models;
 
 namespace FubarDev.WebDavServer.Handlers
 {
@@ -17,14 +15,12 @@ namespace FubarDev.WebDavServer.Handlers
     public interface IPropPatchHandler : IClass1Handler
     {
         /// <summary>
-        /// Patches (sets or removes) properties from the given <paramref name="path"/>
+        /// Patches (sets or removes) properties from the given <paramref name="path"/>.
         /// </summary>
-        /// <param name="path">The path to patch the properties for</param>
-        /// <param name="request">The properties to patch</param>
-        /// <param name="cancellationToken">The cancellcation token</param>
-        /// <returns>The result of the operation</returns>
-        [NotNull]
-        [ItemNotNull]
-        Task<IWebDavResult> PropPatchAsync([NotNull] string path, [NotNull] propertyupdate request, CancellationToken cancellationToken);
+        /// <param name="path">The path to patch the properties for.</param>
+        /// <param name="request">The properties to patch.</param>
+        /// <param name="cancellationToken">The cancellation token.</param>
+        /// <returns>The result of the operation.</returns>
+        Task<IWebDavResult> PropPatchAsync(string path, propertyupdate request, CancellationToken cancellationToken);
     }
 }

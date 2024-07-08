@@ -5,40 +5,38 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
-using FubarDev.WebDavServer.Model;
 using FubarDev.WebDavServer.Props.Store;
-
-using JetBrains.Annotations;
 
 namespace FubarDev.WebDavServer.FileSystem.DotNet
 {
     /// <summary>
-    /// A .NET <see cref="System.IO"/> based implementation of a WebDAV collection
+    /// A .NET <see cref="System.IO"/> based implementation of a WebDAV collection.
     /// </summary>
-    public class DotNetDirectory : DotNetEntry, ICollection, IRecusiveChildrenCollector
+    public class DotNetDirectory : DotNetEntry, ICollection, IRecursiveChildrenCollector
     {
-        private readonly IFileSystemPropertyStore _fileSystemPropertyStore;
+        private readonly IFileSystemPropertyStore? _fileSystemPropertyStore;
 
         private readonly bool _isRoot;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="DotNetDirectory"/> class.
         /// </summary>
-        /// <param name="fileSystem">The file system this collection belongs to</param>
-        /// <param name="parent">The parent collection</param>
-        /// <param name="info">The directory information</param>
-        /// <param name="path">The root-relative path of this collection</param>
-        /// <param name="name">The entry name (<see langword="null"/> when <see cref="FileSystemInfo.Name"/> of <see cref="DotNetEntry.Info"/> should be used)</param>
-        /// <param name="isRoot">Is this the file systems root directory?</param>
+        /// <param name="fileSystem">The file system this collection belongs to.</param>
+        /// <param name="parent">The parent collection.</param>
+        /// <param name="info">The directory information.</param>
+        /// <param name="path">The root-relative path of this collection.</param>
+        /// <param name="name">The entry name (<see langword="null"/> when <see cref="FileSystemInfo.Name"/> of <see cref="DotNetEntry.Info"/> should be used).</param>
+        /// <param name="isRoot">Indicates whether this is the file systems root directory.</param>
         public DotNetDirectory(
-            [NotNull] DotNetFileSystem fileSystem,
-            [CanBeNull] ICollection parent,
-            [NotNull] DirectoryInfo info,
-            [NotNull] Uri path,
-            [CanBeNull] string name,
+            DotNetFileSystem fileSystem,
+            ICollection? parent,
+            DirectoryInfo info,
+            Uri path,
+            string? name,
             bool isRoot = false)
             : base(fileSystem, parent, info, path, name)
         {
@@ -48,29 +46,34 @@ namespace FubarDev.WebDavServer.FileSystem.DotNet
         }
 
         /// <summary>
-        /// Gets the collections directory information
+        /// Gets the collections directory information.
         /// </summary>
         public DirectoryInfo DirectoryInfo { get; }
 
         /// <inheritdoc />
-        public Task<IEntry> GetChildAsync(string name, CancellationToken ct)
+        public async Task<IEntry?> GetChildAsync(string name, CancellationToken ct)
         {
             var newPath = System.IO.Path.Combine(DirectoryInfo.FullName, name);
 
             FileSystemInfo item = new FileInfo(newPath);
             if (!item.Exists)
+            {
                 item = new DirectoryInfo(newPath);
+            }
 
             if (!item.Exists)
-                return Task.FromResult<IEntry>(null);
+            {
+                return null;
+            }
 
             var entry = CreateEntry(item);
 
-            var coll = entry as ICollection;
-            if (coll != null)
-                return coll.GetMountTargetEntryAsync(DotNetFileSystem);
+            if (entry is ICollection coll)
+            {
+                return await coll.GetMountTargetEntryAsync(DotNetFileSystem);
+            }
 
-            return Task.FromResult(entry);
+            return entry;
         }
 
         /// <inheritdoc />
@@ -86,7 +89,9 @@ namespace FubarDev.WebDavServer.FileSystem.DotNet
                 {
                     var coll = entry as ICollection;
                     if (coll != null)
+                    {
                         entry = await coll.GetMountTargetAsync(DotNetFileSystem);
+                    }
 
                     result.Add(entry);
                 }
@@ -102,7 +107,10 @@ namespace FubarDev.WebDavServer.FileSystem.DotNet
             var info = new FileInfo(fullFileName);
             info.Create().Dispose();
             if (FileSystem.PropertyStore != null)
+            {
                 await FileSystem.PropertyStore.UpdateETagAsync(this, cancellationToken).ConfigureAwait(false);
+            }
+
             return (IDocument)CreateEntry(new FileInfo(fullFileName));
         }
 
@@ -113,12 +121,16 @@ namespace FubarDev.WebDavServer.FileSystem.DotNet
 
             var info = new DirectoryInfo(fullDirPath);
             if (info.Exists)
+            {
                 throw new IOException("Collection already exists.");
+            }
 
             info.Create();
 
             if (FileSystem.PropertyStore != null)
+            {
                 await FileSystem.PropertyStore.UpdateETagAsync(this, cancellationToken).ConfigureAwait(false);
+            }
 
             return (ICollection)CreateEntry(new DirectoryInfo(fullDirPath));
         }
@@ -127,11 +139,23 @@ namespace FubarDev.WebDavServer.FileSystem.DotNet
         public override async Task<DeleteResult> DeleteAsync(CancellationToken cancellationToken)
         {
             if (_isRoot)
+            {
                 throw new UnauthorizedAccessException("Cannot remove the file systems root collection");
+            }
 
             var propStore = FileSystem.PropertyStore;
             if (propStore != null)
-                await propStore.RemoveAsync(this, cancellationToken).ConfigureAwait(false);
+            {
+                var entriesToDelete = await GetEntries(int.MaxValue)
+                    .Append(this)
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                foreach (var entry in entriesToDelete)
+                {
+                    await propStore.RemoveAsync(entry, cancellationToken).ConfigureAwait(false);
+                }
+            }
 
             DirectoryInfo.Delete(true);
 
@@ -148,7 +172,9 @@ namespace FubarDev.WebDavServer.FileSystem.DotNet
         {
             var fileInfo = fsInfo as FileInfo;
             if (fileInfo != null)
+            {
                 return new DotNetFile(DotNetFileSystem, this, fileInfo, Path.Append(fileInfo.Name, false));
+            }
 
             var dirInfo = (DirectoryInfo)fsInfo;
             var dirPath = Path.AppendDirectory(dirInfo.Name);

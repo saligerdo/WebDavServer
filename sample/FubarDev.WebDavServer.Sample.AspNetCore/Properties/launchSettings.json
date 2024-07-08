@@ -3,7 +3,7 @@
     "windowsAuthentication": false,
     "anonymousAuthentication": true,
     "iisExpress": {
-      "applicationUrl": "http://localhost:14868/",
+      "applicationUrl": "http://localhost:5809/",
       "sslPort": 0
     }
   },
@@ -14,13 +14,37 @@
         "ASPNETCORE_ENVIRONMENT": "Development"
       }
     },
-    "FubarDev.WebDavServer.Sample.AspNetCore": {
+    "SQLite/Kestrel": {
       "commandName": "Project",
       "commandLineArgs": "--use-kestrel=true --Server:FileSystem=SQLite --Server:PropertyStore=SQLite --Server:LockManager=SQLite",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       },
       "applicationUrl": "http://localhost:5809/"
+    },
+    "SQLite/Kestrel/Negotiate": {
+      "commandName": "Project",
+      "commandLineArgs": "--use-kestrel=true --Server:FileSystem=SQLite --Server:PropertyStore=SQLite --Server:LockManager=SQLite --disable-basic-auth=true --use-negotiate=true",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "http://localhost:5809/"
+    },
+    "No Locking": {
+      "commandName": "Project",
+      "commandLineArgs": "--disable-locking=true --use-kestrel=true --Server:FileSystem=SQLite --Server:PropertyStore=SQLite --Server:LockManager=SQLite",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "http://localhost:5809/"
+    },
+    "Any IP": {
+      "commandName": "Project",
+      "commandLineArgs": "--use-kestrel=true --Server:FileSystem=SQLite --Server:PropertyStore=SQLite --Server:LockManager=SQLite",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "http://*:5809/"
     }
   }
 }

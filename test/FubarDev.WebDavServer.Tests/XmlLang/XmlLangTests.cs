@@ -9,8 +9,6 @@ using System.Xml.Linq;
 using DecaTec.WebDav.Headers;
 using DecaTec.WebDav.WebDavArtifacts;
 
-using FubarDev.WebDavServer.Model;
-
 using Xunit;
 
 namespace FubarDev.WebDavServer.Tests.XmlLang
@@ -37,7 +35,7 @@ namespace FubarDev.WebDavServer.Tests.XmlLang
             var findStatus = await Read(findResult.Content);
             var creationDateProp = findStatus.Root?.Element(WebDavXml.Dav + "response")?.Element(WebDavXml.Dav + "propstat")?.Element(WebDavXml.Dav + "prop")?.Element(WebDavXml.Dav + "creationdate");
             Assert.NotNull(creationDateProp);
-            creationDateProp.SetAttributeValue(XNamespace.Xml + "lang", "en");
+            creationDateProp!.SetAttributeValue(XNamespace.Xml + "lang", "en");
 
             var patchDoc = new XDocument(
                 new XElement(
@@ -65,7 +63,7 @@ namespace FubarDev.WebDavServer.Tests.XmlLang
             var findStatus2 = await Read(findResult2.Content);
             var creationDateProp2 = findStatus2.Root?.Element(WebDavXml.Dav + "response")?.Element(WebDavXml.Dav + "propstat")?.Element(WebDavXml.Dav + "prop")?.Element(WebDavXml.Dav + "creationdate");
             Assert.NotNull(creationDateProp2);
-            Assert.Null(creationDateProp2.Attribute(XNamespace.Xml + "lang"));
+            Assert.Null(creationDateProp2!.Attribute(XNamespace.Xml + "lang"));
         }
 
         [Fact]
@@ -88,7 +86,7 @@ namespace FubarDev.WebDavServer.Tests.XmlLang
             var findStatus = await Read(findResult.Content);
             var displayNameProp = findStatus.Root?.Element(WebDavXml.Dav + "response")?.Element(WebDavXml.Dav + "propstat")?.Element(WebDavXml.Dav + "prop")?.Element(WebDavXml.Dav + "displayname");
             Assert.NotNull(displayNameProp);
-            displayNameProp.SetAttributeValue(XNamespace.Xml + "lang", "en");
+            displayNameProp!.SetAttributeValue(XNamespace.Xml + "lang", "en");
 
             var patchDoc = new XDocument(
                 new XElement(
@@ -116,7 +114,7 @@ namespace FubarDev.WebDavServer.Tests.XmlLang
             var findStatus2 = await Read(findResult2.Content);
             var displayNameProp2 = findStatus2.Root?.Element(WebDavXml.Dav + "response")?.Element(WebDavXml.Dav + "propstat")?.Element(WebDavXml.Dav + "prop")?.Element(WebDavXml.Dav + "displayname");
             Assert.NotNull(displayNameProp2);
-            Assert.Null(displayNameProp2.Attribute(XNamespace.Xml + "lang"));
+            Assert.Null(displayNameProp2!.Attribute(XNamespace.Xml + "lang"));
         }
 
         private async Task<XDocument> Read(HttpContent content)

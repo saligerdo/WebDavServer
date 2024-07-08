@@ -7,7 +7,7 @@ using System.Xml.Linq;
 namespace FubarDev.WebDavServer.Props.Converters
 {
     /// <summary>
-    /// Property converter for a <see langword="string"/>
+    /// Property converter for a <see langword="string"/>.
     /// </summary>
     public class StringConverter : IPropertyConverter<string>
     {
@@ -24,7 +24,7 @@ namespace FubarDev.WebDavServer.Props.Converters
         }
 
         /// <inheritdoc />
-        public bool IsValidValue(string value)
+        public bool IsValidValue(string? value)
         {
             return value != null;
         }

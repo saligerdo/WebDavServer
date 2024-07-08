@@ -4,6 +4,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,12 +13,10 @@ using FubarDev.WebDavServer.FileSystem.Mount;
 using FubarDev.WebDavServer.Locking;
 using FubarDev.WebDavServer.Props.Store;
 
-using JetBrains.Annotations;
-
 namespace FubarDev.WebDavServer.FileSystem.DotNet
 {
     /// <summary>
-    /// A file system implementation using <see cref="System.IO"/>
+    /// A file system implementation using <see cref="System.IO"/>.
     /// </summary>
     public class DotNetFileSystem : ILocalFileSystem, IMountPointManager
     {
@@ -28,19 +27,19 @@ namespace FubarDev.WebDavServer.FileSystem.DotNet
         /// <summary>
         /// Initializes a new instance of the <see cref="DotNetFileSystem"/> class.
         /// </summary>
-        /// <param name="options">The options for this file system</param>
-        /// <param name="mountPoint">The mount point where this file system should be included</param>
-        /// <param name="rootFolder">The root folder</param>
-        /// <param name="pathTraversalEngine">The engine to traverse paths</param>
-        /// <param name="lockManager">The global lock manager</param>
-        /// <param name="propertyStoreFactory">The store for dead properties</param>
+        /// <param name="options">The options for this file system.</param>
+        /// <param name="mountPoint">The mount point where this file system should be included.</param>
+        /// <param name="rootFolder">The root folder.</param>
+        /// <param name="pathTraversalEngine">The engine to traverse paths.</param>
+        /// <param name="lockManager">The global lock manager.</param>
+        /// <param name="propertyStoreFactory">The store for dead properties.</param>
         public DotNetFileSystem(
-            [NotNull] DotNetFileSystemOptions options,
-            [CanBeNull] ICollection mountPoint,
-            [NotNull] string rootFolder,
-            [NotNull] IPathTraversalEngine pathTraversalEngine,
-            ILockManager lockManager = null,
-            IPropertyStoreFactory propertyStoreFactory = null)
+            DotNetFileSystemOptions options,
+            ICollection? mountPoint,
+            string rootFolder,
+            IPathTraversalEngine pathTraversalEngine,
+            ILockManager? lockManager = null,
+            IPropertyStoreFactory? propertyStoreFactory = null)
         {
             LockManager = lockManager;
             RootDirectoryPath = rootFolder;
@@ -48,7 +47,7 @@ namespace FubarDev.WebDavServer.FileSystem.DotNet
             Options = options;
             PropertyStore = propertyStoreFactory?.Create(this);
             var rootPath = mountPoint?.Path ?? new Uri(string.Empty, UriKind.Relative);
-            var rootDir = new DotNetDirectory(this, mountPoint, new DirectoryInfo(rootFolder), rootPath, mountPoint?.Name ?? rootPath.GetName(), true);
+            var rootDir = new DotNetDirectory(this, mountPoint?.Parent, new DirectoryInfo(rootFolder), rootPath, mountPoint?.Name ?? rootPath.GetName(), true);
             Root = new AsyncLazy<ICollection>(() => Task.FromResult<ICollection>(rootDir));
         }
 
@@ -62,15 +61,15 @@ namespace FubarDev.WebDavServer.FileSystem.DotNet
         public AsyncLazy<ICollection> Root { get; }
 
         /// <summary>
-        /// Gets the file systems options
+        /// Gets the file systems options.
         /// </summary>
         public DotNetFileSystemOptions Options { get; }
 
         /// <inheritdoc />
-        public IPropertyStore PropertyStore { get; }
+        public IPropertyStore? PropertyStore { get; }
 
         /// <inheritdoc />
-        public ILockManager LockManager { get; }
+        public ILockManager? LockManager { get; }
 
         /// <inheritdoc />
         public bool SupportsRangedRead { get; } = true;
@@ -85,7 +84,7 @@ namespace FubarDev.WebDavServer.FileSystem.DotNet
         }
 
         /// <inheritdoc />
-        public bool TryGetMountPoint(Uri path, out IFileSystem destination)
+        public bool TryGetMountPoint(Uri path, [NotNullWhen(true)] out IFileSystem? destination)
         {
             return _mountPoints.TryGetValue(path, out destination);
         }

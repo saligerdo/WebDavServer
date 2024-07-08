@@ -5,8 +5,6 @@
 using System.Collections.Generic;
 using System.Xml.Linq;
 
-using JetBrains.Annotations;
-
 namespace FubarDev.WebDavServer.Props
 {
     /// <summary>
@@ -15,22 +13,18 @@ namespace FubarDev.WebDavServer.Props
     public interface IProperty
     {
         /// <summary>
-        /// Gets the XML name of the property
+        /// Gets the XML name of the property.
         /// </summary>
-        [NotNull]
         XName Name { get; }
 
         /// <summary>
-        /// Gets the language of this property value
+        /// Gets the language of this property value.
         /// </summary>
-        [CanBeNull]
-        string Language { get; }
+        string? Language { get; }
 
         /// <summary>
-        /// Gets the alternative XML names
+        /// Gets the alternative XML names.
         /// </summary>
-        [NotNull]
-        [ItemNotNull]
         IReadOnlyCollection<XName> AlternativeNames { get; }
     }
 }

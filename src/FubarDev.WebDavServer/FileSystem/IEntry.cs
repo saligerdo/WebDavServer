@@ -3,10 +3,11 @@
 // </copyright>
 
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
-using JetBrains.Annotations;
+using FubarDev.WebDavServer.Props;
 
 namespace FubarDev.WebDavServer.FileSystem
 {
@@ -16,67 +17,42 @@ namespace FubarDev.WebDavServer.FileSystem
     public interface IEntry
     {
         /// <summary>
-        /// Gets the name of the entry
+        /// Gets the name of the entry.
         /// </summary>
-        [NotNull]
         string Name { get; }
 
         /// <summary>
-        /// Gets the file system of this entry
+        /// Gets the file system of this entry.
         /// </summary>
-        [NotNull]
         IFileSystem FileSystem { get; }
 
         /// <summary>
-        /// Gets the collection that contains this entry
+        /// Gets the collection that contains this entry.
         /// </summary>
         /// <remarks>
         /// This property can be <c>null</c> when this entry is the root collection.
         /// </remarks>
-        [CanBeNull]
-        ICollection Parent { get; }
+        ICollection? Parent { get; }
 
         /// <summary>
-        /// Gets the path of the entry
+        /// Gets the path of the entry relative to the root file system.
         /// </summary>
-        [NotNull]
+        /// <remarks>
+        /// The root file system may be different than the file system of this entry.
+        /// </remarks>
         Uri Path { get; }
 
         /// <summary>
-        /// Gets the last time this entry was modified
+        /// Deletes this entry.
         /// </summary>
-        DateTime LastWriteTimeUtc { get; }
-
-        /// <summary>
-        /// Gets the time this entry was created
-        /// </summary>
-        DateTime CreationTimeUtc { get; }
-
-        /// <summary>
-        /// Deletes this entry
-        /// </summary>
-        /// <param name="cancellationToken">The cancellation token</param>
-        /// <returns>The result of the delete operation</returns>
-        [NotNull]
-        [ItemNotNull]
+        /// <param name="cancellationToken">The cancellation token.</param>
+        /// <returns>The result of the delete operation.</returns>
         Task<DeleteResult> DeleteAsync(CancellationToken cancellationToken);
 
         /// <summary>
-        /// Sets the last write time
+        /// Gets the live properties of this entry.
         /// </summary>
-        /// <param name="lastWriteTime">The new last write time</param>
-        /// <param name="cancellationToken">The cancellation token</param>
-        /// <returns>The async task</returns>
-        [NotNull]
-        Task SetLastWriteTimeUtcAsync(DateTime lastWriteTime, CancellationToken cancellationToken);
-
-        /// <summary>
-        /// Sets the creation time
-        /// </summary>
-        /// <param name="creationTime">The new creation time</param>
-        /// <param name="cancellationToken">The cancellation token</param>
-        /// <returns>The async task</returns>
-        [NotNull]
-        Task SetCreationTimeUtcAsync(DateTime creationTime, CancellationToken cancellationToken);
+        /// <returns>The live properties of this entry.</returns>
+        IEnumerable<IUntypedReadableProperty> GetLiveProperties();
     }
 }

@@ -14,30 +14,29 @@ using FubarDev.WebDavServer.Props;
 using FubarDev.WebDavServer.Props.Dead;
 using FubarDev.WebDavServer.Props.Live;
 
-using JetBrains.Annotations;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace FubarDev.WebDavServer.Engines.Local
 {
     /// <summary>
-    /// The base class of all existing targets
+    /// The base class of all existing targets.
     /// </summary>
     public abstract class EntryTarget : IExistingTarget
     {
-        [NotNull]
         private readonly IEntry _entry;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="EntryTarget"/> class.
         /// </summary>
-        /// <param name="targetActions">The target actions implementation to use</param>
-        /// <param name="parent">The parent collection</param>
-        /// <param name="destinationUrl">The destination URL for this entry</param>
-        /// <param name="entry">The underlying entry</param>
+        /// <param name="targetActions">The target actions implementation to use.</param>
+        /// <param name="parent">The parent collection.</param>
+        /// <param name="destinationUrl">The destination URL for this entry.</param>
+        /// <param name="entry">The underlying entry.</param>
         protected EntryTarget(
             ITargetActions<CollectionTarget, DocumentTarget, MissingTarget> targetActions,
-            [CanBeNull] CollectionTarget parent,
-            [NotNull] Uri destinationUrl,
-            [NotNull] IEntry entry)
+            CollectionTarget? parent,
+            Uri destinationUrl,
+            IEntry entry)
         {
             TargetActions = targetActions;
             _entry = entry;
@@ -50,30 +49,26 @@ namespace FubarDev.WebDavServer.Engines.Local
         public string Name { get; }
 
         /// <summary>
-        /// Gets the parent collection target
+        /// Gets the parent collection target.
         /// </summary>
-        [CanBeNull]
-        public CollectionTarget Parent { get; }
+        public CollectionTarget? Parent { get; }
 
         /// <inheritdoc />
         public Uri DestinationUrl { get; }
 
         /// <summary>
-        /// Gets the target actions implementation to use
+        /// Gets the target actions implementation to use.
         /// </summary>
-        [NotNull]
         protected ITargetActions<CollectionTarget, DocumentTarget, MissingTarget> TargetActions { get; }
 
         /// <inheritdoc />
-        [ItemNotNull]
-        public async Task<IReadOnlyCollection<XName>> SetPropertiesAsync([NotNull][ItemNotNull] IEnumerable<IUntypedWriteableProperty> properties, CancellationToken cancellationToken)
+        public async Task<IReadOnlyCollection<XName>> SetPropertiesAsync(IEnumerable<IUntypedWriteableProperty> properties, CancellationToken cancellationToken)
         {
             var liveProperties = new List<ILiveProperty>();
             var deadProperties = new List<IDeadProperty>();
             foreach (var property in properties)
             {
-                var liveProp = property as ILiveProperty;
-                if (liveProp != null)
+                if (property is ILiveProperty liveProp)
                 {
                     liveProperties.Add(liveProp);
                 }
@@ -87,32 +82,35 @@ namespace FubarDev.WebDavServer.Engines.Local
             var livePropertiesResult = await SetPropertiesAsync(liveProperties, cancellationToken).ConfigureAwait(false);
 
             if (deadProperties.Count != 0)
+            {
                 await SetPropertiesAsync(deadProperties, cancellationToken).ConfigureAwait(false);
+            }
 
             return livePropertiesResult;
         }
 
-        [NotNull]
-        private async Task SetPropertiesAsync([NotNull][ItemNotNull] IEnumerable<IDeadProperty> properties, CancellationToken cancellationToken)
+        private async Task SetPropertiesAsync(IEnumerable<IDeadProperty> properties, CancellationToken cancellationToken)
         {
             var propertyStore = _entry.FileSystem.PropertyStore;
             if (propertyStore == null)
+            {
                 return;
+            }
 
             var elements = new List<XElement>();
             foreach (var property in properties)
             {
                 var propValue = await property.GetXmlValueAsync(cancellationToken).ConfigureAwait(false);
                 if (!property.IsDefaultValue(propValue))
+                {
                     elements.Add(propValue);
+                }
             }
 
             await propertyStore.SetAsync(_entry, elements, cancellationToken).ConfigureAwait(false);
         }
 
-        [NotNull]
-        [ItemNotNull]
-        private async Task<IReadOnlyCollection<XName>> SetPropertiesAsync([NotNull][ItemNotNull] IEnumerable<ILiveProperty> properties, CancellationToken cancellationToken)
+        private async Task<IReadOnlyCollection<XName>> SetPropertiesAsync(IEnumerable<ILiveProperty> properties, CancellationToken cancellationToken)
         {
             var isPropUsed = new Dictionary<XName, bool>();
             var propNameToValue = new Dictionary<XName, XElement>();
@@ -125,21 +123,18 @@ namespace FubarDev.WebDavServer.Engines.Local
 
             if (propNameToValue.Count == 0)
             {
-                return new XName[0];
+                return Array.Empty<XName>();
             }
 
-            using (var propEnum = _entry.GetProperties(TargetActions.Dispatcher, returnInvalidProperties: true).GetEnumerator())
+            var deadPropertyFactory = TargetActions.Context.RequestServices.GetRequiredService<IDeadPropertyFactory>();
+            var props = _entry.GetProperties(deadPropertyFactory, returnInvalidProperties: true);
+            await foreach (var prop in props.ConfigureAwait(false))
             {
-                while (await propEnum.MoveNext(cancellationToken).ConfigureAwait(false))
+                var key = prop.Name;
+                isPropUsed[key] = true;
+                if (prop is IUntypedWriteableProperty writeableProp && propNameToValue.TryGetValue(key, out var propValue))
                 {
-                    var key = propEnum.Current.Name;
-                    isPropUsed[key] = true;
-                    var prop = propEnum.Current as IUntypedWriteableProperty;
-                    XElement propValue;
-                    if (prop != null && propNameToValue.TryGetValue(key, out propValue))
-                    {
-                        await prop.SetXmlValueAsync(propValue, cancellationToken).ConfigureAwait(false);
-                    }
+                    await writeableProp.SetXmlValueAsync(propValue, cancellationToken).ConfigureAwait(false);
                 }
             }
 
@@ -150,7 +145,7 @@ namespace FubarDev.WebDavServer.Engines.Local
                 return unsetPropNames;
             }
 
-            return new XName[0];
+            return Array.Empty<XName>();
         }
     }
 }

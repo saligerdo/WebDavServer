@@ -3,31 +3,31 @@
 // </copyright>
 
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
 using FubarDev.WebDavServer.FileSystem;
-
-using JetBrains.Annotations;
+using FubarDev.WebDavServer.Utils;
 
 namespace FubarDev.WebDavServer.Engines.Local
 {
     /// <summary>
-    /// The <see cref="ITargetActions{TCollection,TDocument,TMissing}"/> implementation that copies between two file systems
+    /// The <see cref="ITargetActions{TCollection,TDocument,TMissing}"/> implementation that copies between two file systems.
     /// </summary>
     public class CopyBetweenFileSystemsTargetAction : ITargetActions<CollectionTarget, DocumentTarget, MissingTarget>
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="CopyBetweenFileSystemsTargetAction"/> class.
         /// </summary>
-        /// <param name="dispatcher">The WebDAV dispatcher</param>
-        public CopyBetweenFileSystemsTargetAction([NotNull] IWebDavDispatcher dispatcher)
+        /// <param name="context">The current WebDAV context.</param>
+        public CopyBetweenFileSystemsTargetAction(IWebDavContext context)
         {
-            Dispatcher = dispatcher;
+            Context = context;
         }
 
         /// <inheritdoc />
-        public IWebDavDispatcher Dispatcher { get; }
+        public IWebDavContext Context { get; }
 
         /// <inheritdoc />
         public RecursiveTargetBehaviour ExistingTargetBehaviour { get; } = RecursiveTargetBehaviour.Overwrite;
@@ -63,26 +63,28 @@ namespace FubarDev.WebDavServer.Engines.Local
         }
 
         /// <inheritdoc />
-        public Task ExecuteAsync(ICollection source, CollectionTarget destination, CancellationToken cancellationToken)
+        public Task CleanupAsync(
+            ICollection source,
+            CollectionTarget destination,
+            IEnumerable<ActionResult> childResults,
+            CancellationToken cancellationToken)
         {
             return CopyETagAsync(source, destination.Collection, cancellationToken);
         }
 
         private static async Task CopyAsync(IDocument source, IDocument destination, CancellationToken cancellationToken)
         {
-            using (var sourceStream = await source.OpenReadAsync(cancellationToken).ConfigureAwait(false))
-            {
-                using (var destinationStream = await destination.CreateAsync(cancellationToken).ConfigureAwait(false))
-                {
-                    await sourceStream.CopyToAsync(destinationStream, 65536, cancellationToken).ConfigureAwait(false);
-                }
-            }
+            using var sourceStream = await source.OpenReadAsync(cancellationToken).ConfigureAwait(false);
+            using var destinationStream = await destination.CreateAsync(cancellationToken).ConfigureAwait(false);
+            await sourceStream.CopyToAsync(destinationStream, SystemInfo.CopyBufferSize, cancellationToken).ConfigureAwait(false);
         }
 
         private static async Task CopyETagAsync(IEntry source, IEntry dest, CancellationToken cancellationToken)
         {
             if (dest is IEntityTagEntry)
+            {
                 return;
+            }
 
             var sourcePropStore = source.FileSystem.PropertyStore;
             var destPropStore = dest.FileSystem.PropertyStore;

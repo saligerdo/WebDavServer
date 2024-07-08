@@ -5,8 +5,6 @@
 using System.Threading;
 using System.Threading.Tasks;
 
-using JetBrains.Annotations;
-
 namespace FubarDev.WebDavServer.Handlers
 {
     /// <summary>
@@ -15,13 +13,11 @@ namespace FubarDev.WebDavServer.Handlers
     public interface IMkColHandler : IClass1Handler
     {
         /// <summary>
-        /// Creates a collection at the given path
+        /// Creates a collection at the given path.
         /// </summary>
-        /// <param name="path">The path to the collection to create</param>
-        /// <param name="cancellationToken">The cancellcation token</param>
-        /// <returns>The result of the operation</returns>
-        [NotNull]
-        [ItemNotNull]
-        Task<IWebDavResult> MkColAsync([NotNull] string path, CancellationToken cancellationToken);
+        /// <param name="path">The path to the collection to create.</param>
+        /// <param name="cancellationToken">The cancellation token.</param>
+        /// <returns>The result of the operation.</returns>
+        Task<IWebDavResult> MkColAsync(string path, CancellationToken cancellationToken);
     }
 }

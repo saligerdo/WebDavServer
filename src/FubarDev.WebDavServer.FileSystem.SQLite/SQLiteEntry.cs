@@ -3,72 +3,78 @@
 // </copyright>
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
-using FubarDev.WebDavServer.Model.Headers;
-
-using JetBrains.Annotations;
+using FubarDev.WebDavServer.Models;
+using FubarDev.WebDavServer.Props;
+using FubarDev.WebDavServer.Props.Dead;
+using FubarDev.WebDavServer.Props.Live;
 
 using SQLite;
 
 namespace FubarDev.WebDavServer.FileSystem.SQLite
 {
     /// <summary>
-    /// A <see cref="SQLitePCL"/> based implementation of a WebDAV entry (collection or document)
+    /// A <see cref="SQLitePCL"/> based implementation of a WebDAV entry (collection or document).
     /// </summary>
-    internal abstract class SQLiteEntry : IEntry, IEntityTagEntry
+    internal abstract class SQLiteEntry : IEntityTagEntry
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="SQLiteEntry"/> class.
         /// </summary>
-        /// <param name="fileSystem">The file system this entry belongs to</param>
-        /// <param name="parent">The parent collection</param>
-        /// <param name="info">The file system information</param>
-        /// <param name="path">The root-relative path of this entry</param>
-        /// <param name="name">The entry name (<see langword="null"/> when <see cref="FileEntry.Name"/> of <see cref="SQLiteEntry.Info"/> should be used)</param>
-        protected SQLiteEntry(SQLiteFileSystem fileSystem, ICollection parent, FileEntry info, Uri path, [CanBeNull] string name)
+        /// <param name="dbFileSystem">The file system this entry belongs to.</param>
+        /// <param name="parent">The parent collection.</param>
+        /// <param name="info">The file system information.</param>
+        /// <param name="path">The root-relative path of this entry.</param>
+        /// <param name="name">The entry name (<see langword="null"/> when <see cref="FileEntry.Name"/> of <see cref="SQLiteEntry.Info"/> should be used).</param>
+        protected SQLiteEntry(SQLiteFileSystem dbFileSystem, ICollection? parent, FileEntry info, Uri path, string? name)
         {
             Parent = parent;
             Info = info;
-            SQLiteFileSystem = fileSystem;
+            DbFileSystem = dbFileSystem;
             Path = path;
             ETag = EntityTag.Parse(Info.ETag).Single();
             Name = name ?? info.Name;
         }
 
         /// <summary>
-        /// Gets the file system information of this entry
+        /// Gets the file system information of this entry.
         /// </summary>
         public FileEntry Info { get; }
 
         /// <summary>
-        /// Gets the file system this entry belongs to
+        /// Gets the file system this entry belongs to.
         /// </summary>
-        public SQLiteFileSystem SQLiteFileSystem { get; }
+        public SQLiteFileSystem DbFileSystem { get; }
 
         /// <summary>
-        /// Gets the SQLite connection
+        /// Gets the SQLite connection.
         /// </summary>
-        public SQLiteConnection Connection => SQLiteFileSystem.Connection;
+        public SQLiteConnection Connection => DbFileSystem.Connection;
 
         /// <inheritdoc />
         public string Name { get; }
 
         /// <inheritdoc />
-        public IFileSystem FileSystem => SQLiteFileSystem;
+        public IFileSystem FileSystem => DbFileSystem;
 
         /// <inheritdoc />
-        public ICollection Parent { get; }
+        public ICollection? Parent { get; }
 
         /// <inheritdoc />
         public Uri Path { get; }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Gets the last time this entry was modified.
+        /// </summary>
         public DateTime LastWriteTimeUtc => Info.LastWriteTimeUtc;
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Gets the time this entry was created.
+        /// </summary>
         public DateTime CreationTimeUtc => Info.CreationTimeUtc;
 
         /// <inheritdoc />
@@ -96,7 +102,12 @@ namespace FubarDev.WebDavServer.FileSystem.SQLite
         /// <inheritdoc />
         public abstract Task<DeleteResult> DeleteAsync(CancellationToken cancellationToken);
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Sets the last write time.
+        /// </summary>
+        /// <param name="lastWriteTime">The new last write time.</param>
+        /// <param name="cancellationToken">The cancellation token.</param>
+        /// <returns>The async task.</returns>
         public Task SetLastWriteTimeUtcAsync(DateTime lastWriteTime, CancellationToken cancellationToken)
         {
             if (Info.LastWriteTimeUtc != lastWriteTime)
@@ -106,10 +117,15 @@ namespace FubarDev.WebDavServer.FileSystem.SQLite
                 Connection.Update(Info);
             }
 
-            return Task.FromResult(0);
+            return Task.CompletedTask;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Sets the creation time.
+        /// </summary>
+        /// <param name="creationTime">The new creation time.</param>
+        /// <param name="cancellationToken">The cancellation token.</param>
+        /// <returns>The async task.</returns>
         public Task SetCreationTimeUtcAsync(DateTime creationTime, CancellationToken cancellationToken)
         {
             if (Info.CreationTimeUtc != creationTime)
@@ -119,7 +135,15 @@ namespace FubarDev.WebDavServer.FileSystem.SQLite
                 Connection.Update(Info);
             }
 
-            return Task.FromResult(0);
+            return Task.CompletedTask;
+        }
+
+        /// <inheritdoc />
+        public IEnumerable<IUntypedReadableProperty> GetLiveProperties()
+        {
+            yield return new LastModifiedProperty(LastWriteTimeUtc, SetLastWriteTimeUtcAsync);
+            yield return new CreationDateProperty(CreationTimeUtc, (value, ct) => SetCreationTimeUtcAsync(value.UtcDateTime, ct));
+            yield return new GetETagProperty(FileSystem.PropertyStore, this);
         }
     }
 }

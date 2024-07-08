@@ -12,7 +12,7 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using FubarDev.WebDavServer.FileSystem;
-using FubarDev.WebDavServer.Model.Headers;
+using FubarDev.WebDavServer.Models;
 
 using MimeKit;
 using MimeKit.IO;
@@ -45,7 +45,8 @@ namespace FubarDev.WebDavServer.Tests.Handlers
         public async Task GetWithoutRangeTest()
         {
             var ct = CancellationToken.None;
-            var root = await FileSystem.Root;
+            var fileSystem = GetFileSystem();
+            var root = await fileSystem.Root.ConfigureAwait(false);
             var testFile = await root.CreateDocumentAsync("test1.txt", ct).ConfigureAwait(false);
             await FillAsync(testFile, int.MaxValue, ct).ConfigureAwait(false);
 
@@ -71,7 +72,8 @@ namespace FubarDev.WebDavServer.Tests.Handlers
         public async Task GetWithSingleRangeTest()
         {
             var ct = CancellationToken.None;
-            var root = await FileSystem.Root;
+            var fileSystem = GetFileSystem();
+            var root = await fileSystem.Root.ConfigureAwait(false);
             var testFile = await root.CreateDocumentAsync("test1.txt", ct).ConfigureAwait(false);
             await FillAsync(testFile, int.MaxValue, ct).ConfigureAwait(false);
 
@@ -96,7 +98,7 @@ namespace FubarDev.WebDavServer.Tests.Handlers
 
                     var contentRange = content.Headers.ContentRange;
                     Assert.NotNull(contentRange);
-                    Assert.Equal(0, contentRange.From);
+                    Assert.Equal(0, contentRange!.From);
                     Assert.Equal(1, contentRange.To);
                     Assert.Equal(_testBlock.Value.Length, contentRange.Length);
 
@@ -112,7 +114,8 @@ namespace FubarDev.WebDavServer.Tests.Handlers
         public async Task GetWithTwoOverlappingRangeTest()
         {
             var ct = CancellationToken.None;
-            var root = await FileSystem.Root;
+            var fileSystem = GetFileSystem();
+            var root = await fileSystem.Root.ConfigureAwait(false);
             var testFile = await root.CreateDocumentAsync("test1.txt", ct).ConfigureAwait(false);
             await FillAsync(testFile, int.MaxValue, ct).ConfigureAwait(false);
 
@@ -137,12 +140,12 @@ namespace FubarDev.WebDavServer.Tests.Handlers
 
                     var contentRange = content.Headers.ContentRange;
                     Assert.NotNull(contentRange);
-                    Assert.Equal(0, contentRange.From);
+                    Assert.Equal(0, contentRange!.From);
                     Assert.Equal(9, contentRange.To);
                     Assert.Equal(_testBlock.Value.Length, contentRange.Length);
 
                     var data = await content
-                        .ReadAsByteArrayAsync().ConfigureAwait(false);
+                        .ReadAsByteArrayAsync(ct).ConfigureAwait(false);
                     var s = Encoding.UTF8.GetString(data);
                     Assert.Equal("1234567890", s);
                 }
@@ -153,7 +156,8 @@ namespace FubarDev.WebDavServer.Tests.Handlers
         public async Task GetWithTwoRangesTest()
         {
             var ct = CancellationToken.None;
-            var root = await FileSystem.Root;
+            var fileSystem = GetFileSystem();
+            var root = await fileSystem.Root.ConfigureAwait(false);
             var testFile = await root.CreateDocumentAsync("test1.txt", ct).ConfigureAwait(false);
             await FillAsync(testFile, int.MaxValue, ct).ConfigureAwait(false);
 
@@ -200,7 +204,8 @@ namespace FubarDev.WebDavServer.Tests.Handlers
         public async Task GetWithUnsatisfiableRangeTest()
         {
             var ct = CancellationToken.None;
-            var root = await FileSystem.Root;
+            var fileSystem = GetFileSystem();
+            var root = await fileSystem.Root.ConfigureAwait(false);
             var testFile = await root.CreateDocumentAsync("test1.txt", ct).ConfigureAwait(false);
             await FillAsync(testFile, int.MaxValue, ct).ConfigureAwait(false);
 

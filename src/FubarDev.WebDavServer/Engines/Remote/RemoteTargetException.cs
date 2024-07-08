@@ -5,12 +5,10 @@
 using System;
 using System.Collections.Generic;
 
-using JetBrains.Annotations;
-
 namespace FubarDev.WebDavServer.Engines.Remote
 {
     /// <summary>
-    /// The exception for a failed remote operation
+    /// The exception for a failed remote operation.
     /// </summary>
     public class RemoteTargetException : Exception
     {
@@ -25,7 +23,7 @@ namespace FubarDev.WebDavServer.Engines.Remote
         /// <summary>
         /// Initializes a new instance of the <see cref="RemoteTargetException"/> class.
         /// </summary>
-        /// <param name="message">The error message</param>
+        /// <param name="message">The error message.</param>
         public RemoteTargetException(string message)
             : base(message)
         {
@@ -35,8 +33,8 @@ namespace FubarDev.WebDavServer.Engines.Remote
         /// <summary>
         /// Initializes a new instance of the <see cref="RemoteTargetException"/> class.
         /// </summary>
-        /// <param name="message">The error message</param>
-        /// <param name="innerException">The inner exception</param>
+        /// <param name="message">The error message.</param>
+        /// <param name="innerException">The inner exception.</param>
         public RemoteTargetException(string message, Exception innerException)
             : base(message, innerException)
         {
@@ -46,7 +44,7 @@ namespace FubarDev.WebDavServer.Engines.Remote
         /// <summary>
         /// Initializes a new instance of the <see cref="RemoteTargetException"/> class.
         /// </summary>
-        /// <param name="href">The <c>href</c> of the failed operation</param>
+        /// <param name="href">The <c>href</c> of the failed operation.</param>
         public RemoteTargetException(IReadOnlyCollection<Uri> href)
         {
             Href = href;
@@ -55,7 +53,7 @@ namespace FubarDev.WebDavServer.Engines.Remote
         /// <summary>
         /// Initializes a new instance of the <see cref="RemoteTargetException"/> class.
         /// </summary>
-        /// <param name="href">The <c>href</c>s of the failed operation</param>
+        /// <param name="href">The <c>href</c>s of the failed operation.</param>
         public RemoteTargetException(params Uri[] href)
         {
             Href = href;
@@ -64,8 +62,8 @@ namespace FubarDev.WebDavServer.Engines.Remote
         /// <summary>
         /// Initializes a new instance of the <see cref="RemoteTargetException"/> class.
         /// </summary>
-        /// <param name="message">The error message</param>
-        /// <param name="href">The <c>href</c>s of the failed operation</param>
+        /// <param name="message">The error message.</param>
+        /// <param name="href">The <c>href</c>s of the failed operation.</param>
         public RemoteTargetException(string message, IReadOnlyCollection<Uri> href)
             : base(message)
         {
@@ -75,8 +73,8 @@ namespace FubarDev.WebDavServer.Engines.Remote
         /// <summary>
         /// Initializes a new instance of the <see cref="RemoteTargetException"/> class.
         /// </summary>
-        /// <param name="message">The error message</param>
-        /// <param name="href">The <c>href</c>s of the failed operation</param>
+        /// <param name="message">The error message.</param>
+        /// <param name="href">The <c>href</c>s of the failed operation.</param>
         public RemoteTargetException(string message, params Uri[] href)
             : base(message)
         {
@@ -86,9 +84,9 @@ namespace FubarDev.WebDavServer.Engines.Remote
         /// <summary>
         /// Initializes a new instance of the <see cref="RemoteTargetException"/> class.
         /// </summary>
-        /// <param name="message">The error message</param>
-        /// <param name="href">The <c>href</c>s of the failed operation</param>
-        /// <param name="innerException">The inner exception</param>
+        /// <param name="message">The error message.</param>
+        /// <param name="href">The <c>href</c>s of the failed operation.</param>
+        /// <param name="innerException">The inner exception.</param>
         public RemoteTargetException(string message, IReadOnlyCollection<Uri> href, Exception innerException)
             : base(message, innerException)
         {
@@ -96,10 +94,8 @@ namespace FubarDev.WebDavServer.Engines.Remote
         }
 
         /// <summary>
-        /// Gets the <c>href</c>s of the failed operation
+        /// Gets the <c>href</c>s of the failed operation.
         /// </summary>
-        [NotNull]
-        [ItemNotNull]
         public IReadOnlyCollection<Uri> Href { get; }
     }
 }

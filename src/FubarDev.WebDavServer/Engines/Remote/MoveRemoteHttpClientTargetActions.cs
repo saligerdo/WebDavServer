@@ -3,28 +3,28 @@
 // </copyright>
 
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 
 using FubarDev.WebDavServer.FileSystem;
 
-using JetBrains.Annotations;
-
 namespace FubarDev.WebDavServer.Engines.Remote
 {
     /// <summary>
-    /// The <see cref="ITargetActions{TCollection,TDocument,TMissing}"/> implementation that moves entries between servers
+    /// The <see cref="ITargetActions{TCollection,TDocument,TMissing}"/> implementation that moves entries between servers.
     /// </summary>
     public class MoveRemoteHttpClientTargetActions : RemoteHttpClientTargetActions, IRemoteMoveTargetActions
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="MoveRemoteHttpClientTargetActions"/> class.
         /// </summary>
-        /// <param name="dispatcher">The WebDAV dispatcher</param>
-        /// <param name="httpClient">The <see cref="HttpClient"/> to use</param>
-        public MoveRemoteHttpClientTargetActions([NotNull] IWebDavDispatcher dispatcher, [NotNull] HttpClient httpClient)
-            : base(dispatcher, httpClient)
+        /// <param name="context">The current WebDAV context.</param>
+        /// <param name="httpClient">The <see cref="HttpClient"/> to use.</param>
+        public MoveRemoteHttpClientTargetActions(IWebDavContext context, HttpClient httpClient)
+            : base(context, httpClient)
         {
         }
 
@@ -96,8 +96,17 @@ namespace FubarDev.WebDavServer.Engines.Remote
         }
 
         /// <inheritdoc />
-        public override Task ExecuteAsync(ICollection source, RemoteCollectionTarget destination, CancellationToken cancellationToken)
+        public override Task CleanupAsync(
+            ICollection source,
+            RemoteCollectionTarget destination,
+            IEnumerable<ActionResult> childResults,
+            CancellationToken cancellationToken)
         {
+            if (childResults.Any(r => r.IsFailure))
+            {
+                return Task.CompletedTask;
+            }
+
             return source.DeleteAsync(cancellationToken);
         }
     }

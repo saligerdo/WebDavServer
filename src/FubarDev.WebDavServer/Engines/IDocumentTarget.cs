@@ -5,8 +5,6 @@
 using System.Threading;
 using System.Threading.Tasks;
 
-using JetBrains.Annotations;
-
 namespace FubarDev.WebDavServer.Engines
 {
     /// <summary>
@@ -21,12 +19,10 @@ namespace FubarDev.WebDavServer.Engines
         where TMissing : class, IMissingTarget<TCollection, TDocument, TMissing>
     {
         /// <summary>
-        /// Delete the document target
+        /// Delete the document target.
         /// </summary>
-        /// <param name="cancellationToken">The cancellation token</param>
-        /// <returns>The document that's now a missing target (because it was deleted by this function)</returns>
-        [NotNull]
-        [ItemNotNull]
+        /// <param name="cancellationToken">The cancellation token.</param>
+        /// <returns>The document that's now a missing target (because it was deleted by this function).</returns>
         Task<TMissing> DeleteAsync(CancellationToken cancellationToken);
     }
 }

@@ -6,58 +6,56 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
-using JetBrains.Annotations;
-
 namespace FubarDev.WebDavServer.FileSystem
 {
     /// <summary>
-    /// The document of a collection
+    /// The document of a collection.
     /// </summary>
     public interface IDocument : IEntry
     {
         /// <summary>
-        /// Gets the length of the document
+        /// Gets the length of the document.
         /// </summary>
         long Length { get; }
 
         /// <summary>
-        /// Opens the document for reading
+        /// Opens the document for reading.
         /// </summary>
-        /// <param name="cancellationToken">The cancellation token</param>
-        /// <returns>The stream used to read the document</returns>
-        [NotNull]
-        [ItemNotNull]
+        /// <param name="cancellationToken">The cancellation token.</param>
+        /// <returns>The stream used to read the document.</returns>
         Task<Stream> OpenReadAsync(CancellationToken cancellationToken);
 
         /// <summary>
-        /// Overwrites the document
+        /// Overwrites the document.
         /// </summary>
-        /// <param name="cancellationToken">The cancellation token</param>
-        /// <returns>The stream used to write to the document</returns>
-        [NotNull]
-        [ItemNotNull]
+        /// <param name="cancellationToken">The cancellation token.</param>
+        /// <returns>The stream used to write to the document.</returns>
         Task<Stream> CreateAsync(CancellationToken cancellationToken);
 
         /// <summary>
-        /// Copies the document to a new location within the same file system
+        /// Opens the document for writing.
         /// </summary>
-        /// <param name="collection">The destination collection</param>
-        /// <param name="name">The new name of the document</param>
-        /// <param name="cancellationToken">The cancellation token</param>
-        /// <returns>The created document</returns>
-        [NotNull]
-        [ItemNotNull]
-        Task<IDocument> CopyToAsync([NotNull] ICollection collection, [NotNull] string name, CancellationToken cancellationToken);
+        /// <param name="position">The position where the data should be written to.</param>
+        /// <param name="cancellationToken">The cancellation token.</param>
+        /// <returns>The stream used to write to the document.</returns>
+        Task<Stream> OpenWriteAsync(long position, CancellationToken cancellationToken);
 
         /// <summary>
-        /// Moves the document to a new location within the same file system
+        /// Copies the document to a new location within the same file system.
         /// </summary>
-        /// <param name="collection">The destination collection</param>
-        /// <param name="name">The new name of the document</param>
-        /// <param name="cancellationToken">The cancellation token</param>
-        /// <returns>The created document</returns>
-        [NotNull]
-        [ItemNotNull]
-        Task<IDocument> MoveToAsync([NotNull] ICollection collection, [NotNull] string name, CancellationToken cancellationToken);
+        /// <param name="collection">The destination collection.</param>
+        /// <param name="name">The new name of the document.</param>
+        /// <param name="cancellationToken">The cancellation token.</param>
+        /// <returns>The created document.</returns>
+        Task<IDocument> CopyToAsync(ICollection collection, string name, CancellationToken cancellationToken);
+
+        /// <summary>
+        /// Moves the document to a new location within the same file system.
+        /// </summary>
+        /// <param name="collection">The destination collection.</param>
+        /// <param name="name">The new name of the document.</param>
+        /// <param name="cancellationToken">The cancellation token.</param>
+        /// <returns>The created document.</returns>
+        Task<IDocument> MoveToAsync(ICollection collection, string name, CancellationToken cancellationToken);
     }
 }

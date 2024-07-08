@@ -5,8 +5,6 @@
 using System.Threading;
 using System.Threading.Tasks;
 
-using JetBrains.Annotations;
-
 namespace FubarDev.WebDavServer.Handlers
 {
     /// <summary>
@@ -20,11 +18,9 @@ namespace FubarDev.WebDavServer.Handlers
         /// <remarks>
         /// This is used to identify the WebDAV capabilities at a given URL.
         /// </remarks>
-        /// <param name="path">The root-relataive file system path to query the options for</param>
-        /// <param name="cancellationToken">The cancellcation token</param>
-        /// <returns>The result of the operation</returns>
-        [NotNull]
-        [ItemNotNull]
-        Task<IWebDavResult> OptionsAsync([NotNull] string path, CancellationToken cancellationToken);
+        /// <param name="path">The root-relataive file system path to query the options for.</param>
+        /// <param name="cancellationToken">The cancellation token.</param>
+        /// <returns>The result of the operation.</returns>
+        Task<IWebDavResult> OptionsAsync(string path, CancellationToken cancellationToken);
     }
 }

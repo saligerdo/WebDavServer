@@ -56,10 +56,10 @@ namespace FubarDev.WebDavServer.Tests.Locking
             var lockManager = ServiceProvider.GetRequiredService<ILockManager>();
             var ct = CancellationToken.None;
             var owner = new XElement("test");
-            var l1 = new Lock("/", "/", false, owner, LockAccessType.Write, LockShareMode.Shared, TimeSpan.FromMilliseconds(100));
-            var l2 = new Lock("/", "/", false, owner, LockAccessType.Write, LockShareMode.Shared, TimeSpan.FromMilliseconds(200));
+            var l1 = new Lock("/", "/", false, null, owner, LockAccessType.Write, LockShareMode.Shared, TimeSpan.FromMilliseconds(100));
+            var l2 = new Lock("/", "/", false, null, owner, LockAccessType.Write, LockShareMode.Shared, TimeSpan.FromMilliseconds(200));
             var evt = new CountdownEvent(2);
-            lockManager.LockReleased += (s, e) =>
+            lockManager.LockReleased += (_, e) =>
             {
                 Assert.True(releasedLocks.Add(e.Lock.StateToken));
                 evt.Signal();
@@ -105,12 +105,13 @@ namespace FubarDev.WebDavServer.Tests.Locking
                 "/",
                 "/",
                 false,
+                null,
                 new XElement("test"),
                 LockAccessType.Write,
                 LockShareMode.Exclusive,
                 TimeSpan.FromMilliseconds(100));
             var sem = new SemaphoreSlim(0, 1);
-            var evt = new EventHandler<LockEventArgs>((s, e) =>
+            var evt = new EventHandler<LockEventArgs>((_, e) =>
             {
                 Assert.True(releasedLocks.Add(e.Lock.StateToken));
                 sem.Release();

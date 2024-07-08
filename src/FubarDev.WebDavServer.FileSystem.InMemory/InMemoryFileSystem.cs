@@ -4,6 +4,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -11,62 +12,51 @@ using FubarDev.WebDavServer.FileSystem.Mount;
 using FubarDev.WebDavServer.Locking;
 using FubarDev.WebDavServer.Props.Store;
 
-using JetBrains.Annotations;
-
 namespace FubarDev.WebDavServer.FileSystem.InMemory
 {
     /// <summary>
-    /// An in-memory file system implementation
+    /// An in-memory file system implementation.
     /// </summary>
     public class InMemoryFileSystem : IFileSystem, IMountPointManager
     {
         private readonly IPathTraversalEngine _pathTraversalEngine;
 
-        private readonly Dictionary<Uri, IFileSystem> _mountPoints = new Dictionary<Uri, IFileSystem>();
+        private readonly Dictionary<Uri, IFileSystem> _mountPoints = new();
 
         /// <summary>
         /// Initializes a new instance of the <see cref="InMemoryFileSystem"/> class.
         /// </summary>
-        /// <param name="mountPoint">The mount point where this file system should be included</param>
-        /// <param name="pathTraversalEngine">The engine to traverse paths</param>
-        /// <param name="systemClock">Interface for the access to the systems clock</param>
-        /// <param name="lockManager">The global lock manager</param>
-        /// <param name="propertyStoreFactory">The store for dead properties</param>
+        /// <param name="mountPoint">The mount point where this file system should be included.</param>
+        /// <param name="pathTraversalEngine">The engine to traverse paths.</param>
+        /// <param name="lockManager">The global lock manager.</param>
+        /// <param name="propertyStoreFactory">The store for dead properties.</param>
         public InMemoryFileSystem(
-            [CanBeNull] ICollection mountPoint,
-            [NotNull] IPathTraversalEngine pathTraversalEngine,
-            [NotNull] ISystemClock systemClock,
-            ILockManager lockManager = null,
-            IPropertyStoreFactory propertyStoreFactory = null)
+            ICollection? mountPoint,
+            IPathTraversalEngine pathTraversalEngine,
+            ILockManager? lockManager = null,
+            IPropertyStoreFactory? propertyStoreFactory = null)
         {
-            SystemClock = systemClock;
             LockManager = lockManager;
             _pathTraversalEngine = pathTraversalEngine;
             var rootPath = mountPoint?.Path ?? new Uri(string.Empty, UriKind.Relative);
-            RootCollection = new InMemoryDirectory(this, mountPoint, rootPath, mountPoint?.Name ?? rootPath.GetName(), true);
+            RootCollection = new InMemoryDirectory(this, mountPoint?.Parent, rootPath, mountPoint?.Name ?? rootPath.GetName(), true);
             Root = new AsyncLazy<ICollection>(() => Task.FromResult<ICollection>(RootCollection));
             PropertyStore = propertyStoreFactory?.Create(this);
         }
 
         /// <summary>
-        /// Gets the root collection
+        /// Gets the root collection.
         /// </summary>
-        [NotNull]
         public InMemoryDirectory RootCollection { get; }
-
-        /// <summary>
-        /// Gets the systems clock
-        /// </summary>
-        public ISystemClock SystemClock { get; }
 
         /// <inheritdoc />
         public AsyncLazy<ICollection> Root { get; }
 
         /// <inheritdoc />
-        public IPropertyStore PropertyStore { get; }
+        public IPropertyStore? PropertyStore { get; }
 
         /// <inheritdoc />
-        public ILockManager LockManager { get; }
+        public ILockManager? LockManager { get; }
 
         /// <inheritdoc />
         public bool SupportsRangedRead { get; } = true;
@@ -86,7 +76,7 @@ namespace FubarDev.WebDavServer.FileSystem.InMemory
         }
 
         /// <inheritdoc />
-        public bool TryGetMountPoint(Uri path, out IFileSystem destination)
+        public bool TryGetMountPoint(Uri path, [NotNullWhen(true)] out IFileSystem? destination)
         {
             return _mountPoints.TryGetValue(path, out destination);
         }

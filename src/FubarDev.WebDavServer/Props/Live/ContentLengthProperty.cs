@@ -7,18 +7,17 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 
-using FubarDev.WebDavServer.Model;
 using FubarDev.WebDavServer.Props.Converters;
 
 namespace FubarDev.WebDavServer.Props.Live
 {
     /// <summary>
-    /// The <c>getcontentlength</c> property
+    /// The <c>getcontentlength</c> property.
     /// </summary>
     public class ContentLengthProperty : ITypedReadableProperty<long>, ILiveProperty
     {
         /// <summary>
-        /// The XML property name
+        /// The XML property name.
         /// </summary>
         public static readonly XName PropertyName = WebDavXml.Dav + "getcontentlength";
 
@@ -29,7 +28,7 @@ namespace FubarDev.WebDavServer.Props.Live
         /// <summary>
         /// Initializes a new instance of the <see cref="ContentLengthProperty"/> class.
         /// </summary>
-        /// <param name="propValue">The initial value</param>
+        /// <param name="propValue">The initial value.</param>
         public ContentLengthProperty(long propValue)
         {
             _propValue = propValue;
@@ -39,7 +38,7 @@ namespace FubarDev.WebDavServer.Props.Live
         public XName Name { get; } = PropertyName;
 
         /// <inheritdoc />
-        public string Language { get; } = null;
+        public string? Language { get; } = null;
 
         /// <inheritdoc />
         public IReadOnlyCollection<XName> AlternativeNames { get; } = new[] { WebDavXml.Dav + "contentlength" };

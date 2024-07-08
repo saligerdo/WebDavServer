@@ -8,41 +8,37 @@ using System.Threading.Tasks;
 using System.Xml.Linq;
 
 using FubarDev.WebDavServer.FileSystem;
-using FubarDev.WebDavServer.Model;
-using FubarDev.WebDavServer.Model.Headers;
+using FubarDev.WebDavServer.Models;
 using FubarDev.WebDavServer.Props.Converters;
 using FubarDev.WebDavServer.Props.Store;
-
-using JetBrains.Annotations;
 
 namespace FubarDev.WebDavServer.Props.Dead
 {
     /// <summary>
-    /// The implementation of the <c>getetag</c> property
+    /// The implementation of the <c>getetag</c> property.
     /// </summary>
     public class GetETagProperty : ITypedReadableProperty<EntityTag>, IDeadProperty
     {
         /// <summary>
-        /// The XML name of the property
+        /// The XML name of the property.
         /// </summary>
-        public static readonly XName PropertyName = WebDavXml.Dav + "getetag";
+        public static readonly XName PropertyName = EntityTag.PropertyName;
 
-        [CanBeNull]
-        private readonly IPropertyStore _propertyStore;
+        private readonly IPropertyStore? _propertyStore;
 
         private readonly IEntry _entry;
 
-        private readonly IEntityTagEntry _etagEntry;
+        private readonly IEntityTagEntry? _etagEntry;
 
-        private XElement _element;
+        private XElement? _element;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="GetETagProperty"/> class.
         /// </summary>
-        /// <param name="propertyStore">The property store to store this property</param>
-        /// <param name="entry">The entry to instantiate this property for</param>
-        /// <param name="cost">The cost of querying the display names property</param>
-        public GetETagProperty([CanBeNull] IPropertyStore propertyStore, IEntry entry, int? cost = null)
+        /// <param name="propertyStore">The property store to store this property.</param>
+        /// <param name="entry">The entry to instantiate this property for.</param>
+        /// <param name="cost">The cost of querying the display names property.</param>
+        public GetETagProperty(IPropertyStore? propertyStore, IEntry entry, int? cost = null)
         {
             _propertyStore = propertyStore;
             _entry = entry;
@@ -55,7 +51,7 @@ namespace FubarDev.WebDavServer.Props.Dead
         public XName Name { get; }
 
         /// <inheritdoc />
-        public string Language { get; } = null;
+        public string? Language { get; } = null;
 
         /// <inheritdoc />
         public IReadOnlyCollection<XName> AlternativeNames { get; } = new[] { WebDavXml.Dav + "etag" };
@@ -64,7 +60,7 @@ namespace FubarDev.WebDavServer.Props.Dead
         public int Cost { get; }
 
         /// <summary>
-        /// Gets the entity tag converter
+        /// Gets the entity tag converter.
         /// </summary>
         public IPropertyConverter<EntityTag> Converter { get; } = new EntityTagConverter();
 

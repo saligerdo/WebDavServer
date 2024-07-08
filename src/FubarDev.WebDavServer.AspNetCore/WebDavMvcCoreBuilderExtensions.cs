@@ -2,12 +2,14 @@
 // Copyright (c) Fubar Development Junker. All rights reserved.
 // </copyright>
 
+using System;
+
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FubarDev.WebDavServer.AspNetCore
 {
     /// <summary>
-    /// Extensions for the <see cref="IMvcCoreBuilder"/>
+    /// Extensions for the <see cref="IMvcCoreBuilder"/>.
     /// </summary>
     public static class WebDavMvcCoreBuilderExtensions
     {
@@ -15,7 +17,7 @@ namespace FubarDev.WebDavServer.AspNetCore
         /// Adds the WebDAV services that are essential to run a WebDAV server.
         /// </summary>
         /// <remarks>
-        /// The user must still add the following services:
+        /// The user must still add the following services.
         /// <list type="bullet">
         /// <item>
         ///     <term><see cref="FileSystem.IFileSystemFactory"/></term>
@@ -32,10 +34,13 @@ namespace FubarDev.WebDavServer.AspNetCore
         /// </list>
         /// </remarks>
         /// <param name="builder">The <see cref="IMvcCoreBuilder"/></param>
+        /// <param name="configureOptions">WebDAV server options to configure.</param>
         /// <returns>The <paramref name="builder"/></returns>
-        public static IMvcCoreBuilder AddWebDav(this IMvcCoreBuilder builder)
+        public static IMvcCoreBuilder AddWebDav(
+            this IMvcCoreBuilder builder,
+            Action<WebDavServerOptions>? configureOptions = null)
         {
-            builder.Services.AddWebDav();
+            builder.Services.AddWebDav(configureOptions);
             return builder;
         }
     }

@@ -17,8 +17,6 @@ using FubarDev.WebDavServer.Props.Store;
 using FubarDev.WebDavServer.Props.Store.InMemory;
 using FubarDev.WebDavServer.Tests.Support;
 
-using JetBrains.Annotations;
-
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -26,15 +24,17 @@ using Xunit;
 
 namespace FubarDev.WebDavServer.Tests.FileSystem
 {
-    public class MountTests : IClassFixture<MountTests.FileSystemServices>, IDisposable
+    public class MountTests : IClassFixture<MountTests.FileSystemServices>
     {
-        private readonly IServiceScope _serviceScope;
-
         public MountTests(FileSystemServices fsServices)
         {
-            var serviceScopeFactory = fsServices.ServiceProvider.GetRequiredService<IServiceScopeFactory>();
-            _serviceScope = serviceScopeFactory.CreateScope();
-            FileSystem = _serviceScope.ServiceProvider.GetRequiredService<IFileSystem>();
+            var fsFactory = fsServices.ServiceProvider.GetRequiredService<IFileSystemFactory>();
+            var principal = new GenericPrincipal(
+                new GenericIdentity(Guid.NewGuid().ToString()),
+                Array.Empty<string>());
+            FileSystem = fsFactory.CreateFileSystem(
+                null,
+                principal);
         }
 
         public IFileSystem FileSystem { get; }
@@ -62,7 +62,17 @@ namespace FubarDev.WebDavServer.Tests.FileSystem
             var root = await FileSystem.Root.ConfigureAwait(false);
             var test = await root.GetChildAsync("test", ct);
             Assert.NotNull(test);
-            await Assert.ThrowsAsync<UnauthorizedAccessException>(async () => await test.DeleteAsync(ct).ConfigureAwait(false)).ConfigureAwait(false);
+            await Assert.ThrowsAsync<UnauthorizedAccessException>(async () => await test!.DeleteAsync(ct).ConfigureAwait(false)).ConfigureAwait(false);
+        }
+
+        [Fact]
+        public async Task ResolvedMountPointsParentPointsToRoot()
+        {
+            var ct = CancellationToken.None;
+            var root = await FileSystem.Root.ConfigureAwait(false);
+            var test = await root.GetChildAsync("test", ct) as ICollection;
+            Assert.NotNull(test);
+            Assert.Same(root, test!.Parent);
         }
 
         [Fact]
@@ -72,7 +82,20 @@ namespace FubarDev.WebDavServer.Tests.FileSystem
             var root = await FileSystem.Root.ConfigureAwait(false);
             var test = await root.GetChildAsync("test", ct) as ICollection;
             Assert.NotNull(test);
-            var testText = await test.GetChildAsync("test.txt", ct) as IDocument;
+            var testText = await test!.GetChildAsync("test.txt", ct) as IDocument;
+            Assert.NotNull(testText);
+            Assert.Equal("Hello!", await testText!.ReadAllAsync(ct));
+        }
+
+        [Fact]
+        public async Task DocumentInMountPointBySelect()
+        {
+            var ct = CancellationToken.None;
+            var selectionResult = await FileSystem.SelectAsync("test/test.txt", ct).ConfigureAwait(false);
+            Assert.False(selectionResult.IsMissing);
+            Assert.NotNull(selectionResult.Document);
+            Assert.NotSame(FileSystem, selectionResult.Document.FileSystem);
+            var testText = selectionResult.Document;
             Assert.NotNull(testText);
             Assert.Equal("Hello!", await testText.ReadAllAsync(ct));
         }
@@ -84,14 +107,9 @@ namespace FubarDev.WebDavServer.Tests.FileSystem
             var root = await FileSystem.Root.ConfigureAwait(false);
             var test = await root.GetChildAsync("test", ct) as ICollection;
             Assert.NotNull(test);
-            var testText = await test.GetChildAsync("test.txt", ct) as IDocument;
+            var testText = await test!.GetChildAsync("test.txt", ct) as IDocument;
             Assert.NotNull(testText);
-            await testText.DeleteAsync(ct).ConfigureAwait(false);
-        }
-
-        public void Dispose()
-        {
-            _serviceScope.Dispose();
+            await testText!.DeleteAsync(ct).ConfigureAwait(false);
         }
 
         public class FileSystemServices : IDisposable
@@ -101,28 +119,33 @@ namespace FubarDev.WebDavServer.Tests.FileSystem
 
             public FileSystemServices()
             {
-                IPropertyStoreFactory propertyStoreFactory = null;
+                IPropertyStoreFactory? propertyStoreFactory = null;
 
                 var serviceCollection = new ServiceCollection()
                     .AddOptions()
-                    .AddLogging()
+                    .AddLogging(
+                        loggerBuilder =>
+                        {
+                            loggerBuilder
+                                .AddDebug()
+                                .SetMinimumLevel(LogLevel.Trace);
+                        })
                     .Configure<InMemoryLockManagerOptions>(
                         opt =>
                         {
-                            opt.Rounding = new DefaultLockTimeRounding(DefaultLockTimeRoundingMode.OneHundredMilliseconds);
+                            opt.Rounding =
+                                new DefaultLockTimeRounding(DefaultLockTimeRoundingMode.OneHundredMilliseconds);
                         })
                     .AddScoped<ILockManager, InMemoryLockManager>()
-                    .AddScoped<IWebDavContext>(sp => new TestHost(sp, new Uri("http://localhost/")))
+                    .AddScoped<IWebDavContext>(sp => new TestHost(sp, new Uri("http://localhost/"), (string?)null))
                     .AddScoped<InMemoryFileSystemFactory>()
                     .AddScoped<IFileSystemFactory, MyVirtualRootFileSystemFactory>()
-                    .AddScoped(sp => propertyStoreFactory ?? (propertyStoreFactory = ActivatorUtilities.CreateInstance<InMemoryPropertyStoreFactory>(sp)))
+                    .AddScoped(
+                        sp => propertyStoreFactory ??= ActivatorUtilities.CreateInstance<InMemoryPropertyStoreFactory>(sp))
                     .AddWebDav();
 
                 _rootServiceProvider = serviceCollection.BuildServiceProvider(true);
                 _scope = _rootServiceProvider.CreateScope();
-
-                var loggerFactory = _rootServiceProvider.GetRequiredService<ILoggerFactory>();
-                loggerFactory.AddDebug(LogLevel.Trace);
             }
 
             public IServiceProvider ServiceProvider => _scope.ServiceProvider;
@@ -134,24 +157,21 @@ namespace FubarDev.WebDavServer.Tests.FileSystem
             }
         }
 
-        // ReSharper disable once ClassNeverInstantiated.Local
         private class MyVirtualRootFileSystemFactory : InMemoryFileSystemFactory
         {
-            [NotNull]
             private readonly IServiceProvider _serviceProvider;
 
             public MyVirtualRootFileSystemFactory(
-                [NotNull] IServiceProvider serviceProvider,
-                [NotNull] IPathTraversalEngine pathTraversalEngine,
-                [NotNull] ISystemClock systemClock,
-                ILockManager lockManager = null,
-                IPropertyStoreFactory propertyStoreFactory = null)
-                : base(pathTraversalEngine, systemClock, lockManager, propertyStoreFactory)
+                IServiceProvider serviceProvider,
+                IPathTraversalEngine pathTraversalEngine,
+                ILockManager? lockManager = null,
+                IPropertyStoreFactory? propertyStoreFactory = null)
+                : base(pathTraversalEngine, lockManager, propertyStoreFactory)
             {
                 _serviceProvider = serviceProvider;
             }
 
-            protected override void InitializeFileSystem(ICollection mountPoint, IPrincipal principal, InMemoryFileSystem fileSystem)
+            protected override void InitializeFileSystem(ICollection? mountPoint, IPrincipal principal, InMemoryFileSystem fileSystem)
             {
                 // Create the mount point
                 var testMountPoint = fileSystem.RootCollection.CreateCollection("test");

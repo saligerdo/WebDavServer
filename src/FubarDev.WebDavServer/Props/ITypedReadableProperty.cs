@@ -5,8 +5,6 @@
 using System.Threading;
 using System.Threading.Tasks;
 
-using JetBrains.Annotations;
-
 namespace FubarDev.WebDavServer.Props
 {
     /// <summary>
@@ -16,12 +14,10 @@ namespace FubarDev.WebDavServer.Props
     public interface ITypedReadableProperty<T> : IUntypedReadableProperty
     {
         /// <summary>
-        /// Gets the underlying typed value
+        /// Gets the underlying typed value.
         /// </summary>
-        /// <param name="ct">The cancellation token</param>
-        /// <returns>The underlying typed value</returns>
-        [NotNull]
-        [ItemNotNull]
+        /// <param name="ct">The cancellation token.</param>
+        /// <returns>The underlying typed value.</returns>
         Task<T> GetValueAsync(CancellationToken ct);
     }
 }

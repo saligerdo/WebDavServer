@@ -4,6 +4,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -12,8 +13,6 @@ using System.Threading.Tasks;
 using FubarDev.WebDavServer.FileSystem.Mount;
 using FubarDev.WebDavServer.Locking;
 using FubarDev.WebDavServer.Props.Store;
-
-using JetBrains.Annotations;
 
 using db = SQLite;
 
@@ -24,10 +23,8 @@ namespace FubarDev.WebDavServer.FileSystem.SQLite
     /// </summary>
     public class SQLiteFileSystem : ILocalFileSystem, IDisposable, IMountPointManager
     {
-        [NotNull]
         private readonly db::SQLiteConnection _connection;
 
-        [NotNull]
         private readonly IPathTraversalEngine _pathTraversalEngine;
 
         private readonly Dictionary<Uri, IFileSystem> _mountPoints = new Dictionary<Uri, IFileSystem>();
@@ -35,21 +32,21 @@ namespace FubarDev.WebDavServer.FileSystem.SQLite
         /// <summary>
         /// Initializes a new instance of the <see cref="SQLiteFileSystem"/> class.
         /// </summary>
-        /// <param name="options">The options for this file system</param>
-        /// <param name="mountPoint">The mount point where this file system should be included</param>
-        /// <param name="connection">The SQLite database connection</param>
-        /// <param name="pathTraversalEngine">The engine to traverse paths</param>
-        /// <param name="lockManager">The global lock manager</param>
-        /// <param name="propertyStoreFactory">The store for dead properties</param>
+        /// <param name="options">The options for this file system.</param>
+        /// <param name="mountPoint">The mount point where this file system should be included.</param>
+        /// <param name="connection">The SQLite database connection.</param>
+        /// <param name="pathTraversalEngine">The engine to traverse paths.</param>
+        /// <param name="lockManager">The global lock manager.</param>
+        /// <param name="propertyStoreFactory">The store for dead properties.</param>
         public SQLiteFileSystem(
-            [NotNull] SQLiteFileSystemOptions options,
-            [CanBeNull] ICollection mountPoint,
-            [NotNull] db::SQLiteConnection connection,
-            [NotNull] IPathTraversalEngine pathTraversalEngine,
-            [CanBeNull] ILockManager lockManager = null,
-            [CanBeNull] IPropertyStoreFactory propertyStoreFactory = null)
+            SQLiteFileSystemOptions options,
+            ICollection? mountPoint,
+            db::SQLiteConnection connection,
+            IPathTraversalEngine pathTraversalEngine,
+            ILockManager? lockManager = null,
+            IPropertyStoreFactory? propertyStoreFactory = null)
         {
-            RootDirectoryPath = Path.GetDirectoryName(connection.DatabasePath);
+            RootDirectoryPath = Path.GetDirectoryName(connection.DatabasePath)!;
             LockManager = lockManager;
             _connection = connection;
             _pathTraversalEngine = pathTraversalEngine;
@@ -62,12 +59,12 @@ namespace FubarDev.WebDavServer.FileSystem.SQLite
         }
 
         /// <summary>
-        /// Gets the file systems options
+        /// Gets the file systems options.
         /// </summary>
         public SQLiteFileSystemOptions Options { get; }
 
         /// <summary>
-        /// Gets the SQLite DB connection
+        /// Gets the SQLite DB connection.
         /// </summary>
         public db::SQLiteConnection Connection => _connection;
 
@@ -78,10 +75,10 @@ namespace FubarDev.WebDavServer.FileSystem.SQLite
         public bool SupportsRangedRead { get; } = true;
 
         /// <inheritdoc />
-        public IPropertyStore PropertyStore { get; }
+        public IPropertyStore? PropertyStore { get; }
 
         /// <inheritdoc />
-        public ILockManager LockManager { get; }
+        public ILockManager? LockManager { get; }
 
         /// <inheritdoc />
         public string RootDirectoryPath { get; }
@@ -99,7 +96,7 @@ namespace FubarDev.WebDavServer.FileSystem.SQLite
         }
 
         /// <inheritdoc />
-        public bool TryGetMountPoint(Uri path, out IFileSystem destination)
+        public bool TryGetMountPoint(Uri path, [NotNullWhen(true)] out IFileSystem? destination)
         {
             return _mountPoints.TryGetValue(path, out destination);
         }

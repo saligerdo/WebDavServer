@@ -2,48 +2,51 @@
 // Copyright (c) Fubar Development Junker. All rights reserved.
 // </copyright>
 
+#nullable disable warnings
+#nullable enable annotations
+
 using SQLite;
 
 namespace FubarDev.WebDavServer.Props.Store.SQLite
 {
     /// <summary>
-    /// An entity for properties
+    /// An entity for properties.
     /// </summary>
     [Table("props")]
     internal class PropertyEntry
     {
         /// <summary>
-        /// Gets or sets the unique identifier
+        /// Gets or sets the unique identifier.
         /// </summary>
         [PrimaryKey]
         [Column("id")]
-        public string Id { get; set; }
+        public string Id { get; set; } = default!;
 
         /// <summary>
-        /// Gets or sets the serialized XML name
+        /// Gets or sets the serialized XML name.
         /// </summary>
         [Column("path")]
         [Unique(Name = "unq_idx", Order = 0)]
         [Indexed]
-        public string Path { get; set; }
+        public string Path { get; set; } = default!;
 
         /// <summary>
-        /// Gets or sets the serialized XML name
+        /// Gets or sets the serialized XML name.
         /// </summary>
         [Column("name")]
         [Unique(Name = "unq_idx", Order = 1)]
-        public string XmlName { get; set; }
+        public string XmlName { get; set; } = default!;
 
         /// <summary>
-        /// Gets or sets the XML language identifier
+        /// Gets or sets the XML language identifier.
         /// </summary>
         [Column("lang")]
-        public string Language { get; set; }
+        public string? Language { get; set; }
 
         /// <summary>
-        /// Gets or sets the XML element
+        /// Gets or sets the XML element.
         /// </summary>
         [Column("value")]
-        public string Value { get; set; }
+        public string Value { get; set; } = default!;
     }
 }

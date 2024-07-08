@@ -5,9 +5,7 @@
 using System;
 using System.Xml.Linq;
 
-using FubarDev.WebDavServer.Model.Headers;
-
-using JetBrains.Annotations;
+using FubarDev.WebDavServer.Models;
 
 namespace FubarDev.WebDavServer.Locking
 {
@@ -23,14 +21,15 @@ namespace FubarDev.WebDavServer.Locking
         /// <summary>
         /// Initializes a new instance of the <see cref="ActiveLock"/> class.
         /// </summary>
-        /// <param name="l">The lock to create this active lock from</param>
-        /// <param name="issued">The date/time when this lock was issued</param>
-        internal ActiveLock([NotNull] ILock l, DateTime issued)
+        /// <param name="l">The lock to create this active lock from.</param>
+        /// <param name="issued">The date/time when this lock was issued.</param>
+        internal ActiveLock(ILock l, DateTime issued)
             : this(
                 l.Path,
                 l.Href,
                 l.Recursive,
-                l.GetOwner(),
+                l.Owner,
+                l.GetOwnerHref(),
                 LockAccessType.Parse(l.AccessType),
                 LockShareMode.Parse(l.ShareMode),
                 l.Timeout,
@@ -42,15 +41,16 @@ namespace FubarDev.WebDavServer.Locking
         /// <summary>
         /// Initializes a new instance of the <see cref="ActiveLock"/> class.
         /// </summary>
-        /// <param name="l">The lock to create this active lock from</param>
-        /// <param name="issued">The date/time when this lock was issued</param>
-        /// <param name="timeout">Override the timeout from the original lock (to enforce rounding)</param>
-        internal ActiveLock([NotNull] ILock l, DateTime issued, TimeSpan timeout)
+        /// <param name="l">The lock to create this active lock from.</param>
+        /// <param name="issued">The date/time when this lock was issued.</param>
+        /// <param name="timeout">Override the timeout from the original lock (to enforce rounding).</param>
+        internal ActiveLock(ILock l, DateTime issued, TimeSpan timeout)
             : this(
                 l.Path,
                 l.Href,
                 l.Recursive,
-                l.GetOwner(),
+                l.Owner,
+                l.GetOwnerHref(),
                 LockAccessType.Parse(l.AccessType),
                 LockShareMode.Parse(l.ShareMode),
                 timeout,
@@ -62,20 +62,22 @@ namespace FubarDev.WebDavServer.Locking
         /// <summary>
         /// Initializes a new instance of the <see cref="ActiveLock"/> class.
         /// </summary>
-        /// <param name="path">The file system path (root-relative) this lock should be applied to</param>
-        /// <param name="href">The href this lock should be applied to (might be relative or absolute)</param>
-        /// <param name="recursive">Must the lock be applied recursively to all children?</param>
-        /// <param name="owner">The owner of the lock</param>
-        /// <param name="accessType">The <see cref="LockAccessType"/> of the lock</param>
-        /// <param name="shareMode">The <see cref="LockShareMode"/> of the lock</param>
-        /// <param name="timeout">The lock timeout</param>
-        /// <param name="issued">The date/time when this lock was issued</param>
-        /// <param name="lastRefresh">The date/time of the last refresh</param>
+        /// <param name="path">The file system path (root-relative) this lock should be applied to.</param>
+        /// <param name="href">The href this lock should be applied to (might be relative or absolute).</param>
+        /// <param name="recursive">Indicates whether the lock must be applied recursively to all children.</param>
+        /// <param name="owner">The owner of the lock.</param>
+        /// <param name="ownerHref">The owner href of the lock.</param>
+        /// <param name="accessType">The <see cref="LockAccessType"/> of the lock.</param>
+        /// <param name="shareMode">The <see cref="LockShareMode"/> of the lock.</param>
+        /// <param name="timeout">The lock timeout.</param>
+        /// <param name="issued">The date/time when this lock was issued.</param>
+        /// <param name="lastRefresh">The date/time of the last refresh.</param>
         internal ActiveLock(
-            [NotNull] string path,
-            [NotNull] string href,
+            string path,
+            string href,
             bool recursive,
-            [CanBeNull] XElement owner,
+            string? owner,
+            XElement? ownerHref,
             LockAccessType accessType,
             LockShareMode shareMode,
             TimeSpan timeout,
@@ -86,6 +88,7 @@ namespace FubarDev.WebDavServer.Locking
                 href,
                 recursive,
                 owner,
+                ownerHref,
                 accessType.Name.LocalName,
                 shareMode.Name.LocalName,
                 timeout)
@@ -99,32 +102,35 @@ namespace FubarDev.WebDavServer.Locking
         /// <summary>
         /// Initializes a new instance of the <see cref="ActiveLock"/> class.
         /// </summary>
-        /// <param name="path">The file system path (root-relative) this lock should be applied to</param>
-        /// <param name="href">The href this lock should be applied to (might be relative or absolute)</param>
-        /// <param name="recursive">Must the lock be applied recursively to all children?</param>
-        /// <param name="owner">The owner of the lock</param>
-        /// <param name="accessType">The <see cref="LockAccessType"/> of the lock</param>
-        /// <param name="shareMode">The <see cref="LockShareMode"/> of the lock</param>
-        /// <param name="timeout">The lock timeout</param>
-        /// <param name="issued">The date/time when this lock was issued</param>
-        /// <param name="lastRefresh">The date/time of the last refresh</param>
-        /// <param name="stateToken">The stateTokenh</param>
+        /// <param name="path">The file system path (root-relative) this lock should be applied to.</param>
+        /// <param name="href">The href this lock should be applied to (might be relative or absolute).</param>
+        /// <param name="recursive">Indicates whether the lock must be applied recursively to all children.</param>
+        /// <param name="owner">The owner of the lock.</param>
+        /// <param name="ownerHref">The owner href of the lock.</param>
+        /// <param name="accessType">The <see cref="LockAccessType"/> of the lock.</param>
+        /// <param name="shareMode">The <see cref="LockShareMode"/> of the lock.</param>
+        /// <param name="timeout">The lock timeout.</param>
+        /// <param name="issued">The date/time when this lock was issued.</param>
+        /// <param name="lastRefresh">The date/time of the last refresh.</param>
+        /// <param name="stateToken">The state token.</param>
         internal ActiveLock(
-            [NotNull] string path,
-            [NotNull] string href,
+            string path,
+            string href,
             bool recursive,
-            [CanBeNull] XElement owner,
+            string? owner,
+            XElement? ownerHref,
             LockAccessType accessType,
             LockShareMode shareMode,
             TimeSpan timeout,
             DateTime issued,
             DateTime? lastRefresh,
-            [NotNull] string stateToken)
+            string stateToken)
             : base(
                 path,
                 href,
                 recursive,
                 owner,
+                ownerHref,
                 accessType.Name.LocalName,
                 shareMode.Name.LocalName,
                 timeout)

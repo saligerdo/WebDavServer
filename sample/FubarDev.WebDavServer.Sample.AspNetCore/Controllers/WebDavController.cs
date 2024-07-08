@@ -1,4 +1,5 @@
 ﻿using FubarDev.WebDavServer.AspNetCore;
+using FubarDev.WebDavServer.AspNetCore.Filters;
 
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -8,10 +9,14 @@ namespace FubarDev.WebDavServer.Sample.AspNetCore.Controllers
 {
     [Route("_dav/{*path}")]
     [Authorize]
+    [WebDavAnyExceptionFilter]
     public class WebDavController : WebDavControllerBase
     {
-        public WebDavController(IWebDavContext context, IWebDavDispatcher dispatcher, ILogger<WebDavIndirectResult> responseLogger = null)
-            : base(context, dispatcher, responseLogger)
+        public WebDavController(
+            IWebDavContext context,
+            IWebDavDispatcher dispatcher,
+            ILoggerFactory? loggerFactory = null)
+            : base(context, dispatcher, loggerFactory)
         {
         }
     }

@@ -8,9 +8,6 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using FubarDev.WebDavServer.FileSystem;
-using FubarDev.WebDavServer.Model;
-
-using JetBrains.Annotations;
 
 namespace FubarDev.WebDavServer.Handlers.Impl
 {
@@ -19,14 +16,13 @@ namespace FubarDev.WebDavServer.Handlers.Impl
     /// </summary>
     public class OptionsHandler : IOptionsHandler
     {
-        [NotNull]
         private readonly IFileSystem _rootFileSystem;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="OptionsHandler"/> class.
         /// </summary>
-        /// <param name="rootFileSystem">The root file system</param>
-        public OptionsHandler([NotNull] IFileSystem rootFileSystem)
+        /// <param name="rootFileSystem">The root file system.</param>
+        public OptionsHandler(IFileSystem rootFileSystem)
         {
             _rootFileSystem = rootFileSystem;
         }
@@ -44,10 +40,9 @@ namespace FubarDev.WebDavServer.Handlers.Impl
 
         private class WebDavOptionsResult : WebDavResult
         {
-            [NotNull]
             private readonly IFileSystem _targetFileSystem;
 
-            public WebDavOptionsResult([NotNull] IFileSystem targetFileSystem)
+            public WebDavOptionsResult(IFileSystem targetFileSystem)
                 : base(WebDavStatusCode.OK)
             {
                 _targetFileSystem = targetFileSystem;
@@ -57,14 +52,22 @@ namespace FubarDev.WebDavServer.Handlers.Impl
             {
                 IImmutableDictionary<string, IEnumerable<string>> headers = ImmutableDictionary<string, IEnumerable<string>>.Empty;
 
-                foreach (var webDavClass in response.Dispatcher.SupportedClasses)
+                foreach (var webDavClass in response.Context.Dispatcher.SupportedClasses)
+                {
                     headers = AddHeaderValues(headers, webDavClass.OptionsResponseHeaders);
+                }
 
                 if (_targetFileSystem.SupportsRangedRead)
+                {
                     Headers["Accept-Ranges"] = new[] { "bytes" };
+                }
 
                 foreach (var header in headers)
+                {
                     Headers[header.Key] = header.Value;
+                }
+
+                Headers["MS-Author-Via"] = new[] { "DAV" };
 
                 return base.ExecuteResultAsync(response, ct);
             }

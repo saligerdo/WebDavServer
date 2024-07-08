@@ -5,14 +5,12 @@
 using System;
 using System.Collections.Generic;
 
-using JetBrains.Annotations;
-
 using Microsoft.AspNetCore.Mvc.Routing;
 
 namespace FubarDev.WebDavServer.AspNetCore.Routing
 {
     /// <summary>
-    /// The WebDAV HTTP MOVE method
+    /// The WebDAV HTTP MOVE method.
     /// </summary>
     public class HttpMoveAttribute : HttpMethodAttribute
     {
@@ -30,11 +28,13 @@ namespace FubarDev.WebDavServer.AspNetCore.Routing
         /// Initializes a new instance of the <see cref="HttpMoveAttribute"/> class.
         /// </summary>
         /// <param name="template">The route template. May not be null.</param>
-        public HttpMoveAttribute([NotNull] string template)
+        public HttpMoveAttribute(string template)
             : base(_supportedMethods, template)
         {
             if (template == null)
+            {
                 throw new ArgumentNullException(nameof(template));
+            }
         }
     }
 }

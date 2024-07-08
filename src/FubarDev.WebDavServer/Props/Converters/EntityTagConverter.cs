@@ -4,12 +4,12 @@
 
 using System.Xml.Linq;
 
-using FubarDev.WebDavServer.Model.Headers;
+using FubarDev.WebDavServer.Models;
 
 namespace FubarDev.WebDavServer.Props.Converters
 {
     /// <summary>
-    /// Property converter for an <see cref="EntityTag"/>
+    /// Property converter for an <see cref="EntityTag"/>.
     /// </summary>
     public class EntityTagConverter : IPropertyConverter<EntityTag>
     {

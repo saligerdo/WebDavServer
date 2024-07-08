@@ -10,26 +10,35 @@ using FubarDev.WebDavServer.AspNetCore;
 using FubarDev.WebDavServer.AspNetCore.Logging;
 using FubarDev.WebDavServer.FileSystem;
 using FubarDev.WebDavServer.FileSystem.DotNet;
+using FubarDev.WebDavServer.FileSystem.InMemory;
 using FubarDev.WebDavServer.FileSystem.SQLite;
+using FubarDev.WebDavServer.Handlers;
 using FubarDev.WebDavServer.Locking;
 using FubarDev.WebDavServer.Locking.InMemory;
 using FubarDev.WebDavServer.Locking.SQLite;
 using FubarDev.WebDavServer.Props.Store;
+using FubarDev.WebDavServer.Props.Store.InMemory;
 using FubarDev.WebDavServer.Props.Store.SQLite;
 using FubarDev.WebDavServer.Props.Store.TextFile;
 using FubarDev.WebDavServer.Sample.AspNetCore.Middlewares;
+using FubarDev.WebDavServer.Sample.AspNetCore.Services;
 
-using idunno.Authentication;
+using idunno.Authentication.Basic;
 
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
 using Npam.Interop;
+
+using Serilog;
 
 namespace FubarDev.WebDavServer.Sample.AspNetCore
 {
@@ -39,12 +48,14 @@ namespace FubarDev.WebDavServer.Sample.AspNetCore
         {
             DotNet,
             SQLite,
+            InMemory,
         }
 
         private enum PropertyStoreType
         {
             TextFile,
             SQLite,
+            InMemory,
         }
 
         private enum LockManagerType
@@ -56,40 +67,75 @@ namespace FubarDev.WebDavServer.Sample.AspNetCore
         public Startup(IConfiguration configuration)
         {
             Configuration = configuration;
+            DisableBasicAuth = configuration.GetValue<bool>("disable-basic-auth");
+            DisableLocking = configuration.GetValue<bool>("disable-locking");
+            UseNegotiate = configuration.GetValue<bool>("use-negotiate");
+            IsKestrel = configuration.GetValue<bool>("use-kestrel");
         }
 
-        public IConfiguration Configuration { get; }
+        public bool IsKestrel { get; }
+
+        public bool UseNegotiate { get; set; }
+
+        public bool DisableLocking { get; set; }
+
+        public bool DisableBasicAuth { get; set; }
+
+        private IConfiguration Configuration { get; }
 
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
-            services.AddAuthentication(
-                    opt =>
-                    {
-                        if (!Program.IsKestrel || !Program.DisableBasicAuth)
-                        {
-                            opt.DefaultScheme = "Basic";
-                        }
-                        else
-                        {
-                            opt.DefaultScheme = "Anonymous";
-                        }
+            // Remove request body size limits
+            services
+                .Configure<KestrelServerOptions>(
+                    opt => opt.Limits.MaxRequestBodySize = null)
+                .Configure<IISServerOptions>(
+                    opt => opt.MaxRequestBodySize = null);
 
-                        opt.AddScheme<Authentication.AnonymousAuthHandler>("Anonymous", null);
-                    })
-                .AddBasic(
-                    opt =>
-                    {
-                        opt.Events.OnValidateCredentials = ValidateCredentialsAsync;
-                        opt.AllowInsecureProtocol = true;
-                    });
+            if (UseNegotiate)
+            {
+                services.AddAuthentication(NegotiateDefaults.AuthenticationScheme).AddNegotiate();
+            }
+            else
+            {
 
-            services.Configure<WebDavHostOptions>(cfg => Configuration.Bind("Host", cfg));
+                services.AddAuthentication(
+                        opt =>
+                        {
+                            if (!IsKestrel || !DisableBasicAuth)
+                            {
+                                opt.DefaultScheme = BasicAuthenticationDefaults.AuthenticationScheme;
+                            }
+                            else
+                            {
+                                opt.DefaultScheme = "Anonymous";
+                            }
+
+                            opt.AddScheme<Authentication.AnonymousAuthHandler>("Anonymous", null);
+                        })
+                    .AddBasic(
+                        opt =>
+                        {
+                            opt.Events = new BasicAuthenticationEvents()
+                            {
+                                OnValidateCredentials = ValidateCredentialsAsync,
+                            };
+
+                            opt.AllowInsecureProtocol = true;
+                        });
+
+                services.Configure<WebDavHostOptions>(cfg => Configuration.Bind("Host", cfg));
+            }
+            
 
             services
                 .AddMvcCore()
                 .AddAuthorization()
-                .AddWebDav();
+                .AddWebDav(opt => opt.EnableClass2 = !DisableLocking);
+
+            services
+                .AddSingleton<IGetCollectionHandler, GetCollectionHandler>();
 
             var serverConfig = new ServerConfiguration();
             var serverConfigSection = Configuration.GetSection("Server");
@@ -105,13 +151,17 @@ namespace FubarDev.WebDavServer.Sample.AspNetCore
                                 opt.RootPath = Path.Combine(Path.GetTempPath(), "webdav");
                                 opt.AnonymousUserName = "anonymous";
                             })
-                        .AddScoped<IFileSystemFactory, DotNetFileSystemFactory>();
+                        .AddSingleton<IFileSystemFactory, DotNetFileSystemFactory>();
                     break;
                 case FileSystemType.SQLite:
                     services
                         .Configure<SQLiteFileSystemOptions>(
                             opt => opt.RootPath = Path.Combine(Path.GetTempPath(), "webdav"))
-                        .AddScoped<IFileSystemFactory, SQLiteFileSystemFactory>();
+                        .AddSingleton<IFileSystemFactory, SQLiteFileSystemFactory>();
+                    break;
+                case FileSystemType.InMemory:
+                    services
+                        .AddSingleton<IFileSystemFactory, InMemoryFileSystemFactory>();
                     break;
                 default:
                     throw new NotSupportedException();
@@ -121,51 +171,47 @@ namespace FubarDev.WebDavServer.Sample.AspNetCore
             {
                 case PropertyStoreType.TextFile:
                     services
-                        .AddScoped<IPropertyStoreFactory, TextFilePropertyStoreFactory>();
+                        .AddSingleton<IPropertyStoreFactory, TextFilePropertyStoreFactory>();
                     break;
                 case PropertyStoreType.SQLite:
                     services
-                        .AddScoped<IPropertyStoreFactory, SQLitePropertyStoreFactory>();
+                        .AddSingleton<IPropertyStoreFactory, SQLitePropertyStoreFactory>();
+                    services.Configure<SQLitePropertyStoreOptions>(opt => opt.EstimatedCost = 0);
+                    break;
+                case PropertyStoreType.InMemory:
+                    services
+                        .AddSingleton<IPropertyStoreFactory, InMemoryPropertyStoreFactory>();
                     break;
                 default:
                     throw new NotSupportedException();
             }
 
-            switch (serverConfig.LockManager)
+            if (!DisableLocking)
             {
-                case LockManagerType.InMemory:
-                    services
-                        .AddSingleton<ILockManager, InMemoryLockManager>();
-                    break;
-                case LockManagerType.SQLite:
-                    services
-                        .AddSingleton<ILockManager, SQLiteLockManager>()
-                        .Configure<SQLiteLockManagerOptions>(
-                            cfg => cfg.DatabaseFileName = Path.Combine(Path.GetTempPath(), "webdav", "locks.db"));
-                    break;
-                default:
-                    throw new NotSupportedException();
+                switch (serverConfig.LockManager)
+                {
+                    case LockManagerType.InMemory:
+                        services
+                            .AddSingleton<ILockManager, InMemoryLockManager>();
+                        break;
+                    case LockManagerType.SQLite:
+                        services
+                            .AddSingleton<ILockManager, SQLiteLockManager>()
+                            .Configure<SQLiteLockManagerOptions>(
+                                cfg => cfg.DatabaseFileName = Path.Combine(Path.GetTempPath(), "webdav", "locks.db"));
+                        break;
+                    default:
+                        throw new NotSupportedException();
+                }
             }
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, IHostingEnvironment env)
+        public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
         {
             if (env.IsDevelopment())
             {
                 app.UseDeveloperExceptionPage();
-            }
-
-            if (!Program.IsKestrel || !Program.DisableBasicAuth)
-            {
-                app.UseAuthentication();
-            }
-
-            app.UseMiddleware<RequestLogMiddleware>();
-
-            if (!Program.IsKestrel)
-            {
-                app.UseMiddleware<ImpersonationMiddleware>();
             }
 
             app.UseForwardedHeaders(new ForwardedHeadersOptions()
@@ -173,15 +219,91 @@ namespace FubarDev.WebDavServer.Sample.AspNetCore
                 ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
             });
 
-            app.UseMvc();
+            app.UseSerilogRequestLogging();
+
+            app.UseMiddleware<RequestLogMiddleware>();
+
+            app.UseRouting();
+
+            if (!IsKestrel || !DisableBasicAuth || UseNegotiate)
+            {
+                app.UseAuthentication();
+            }
+
+            if (!IsKestrel)
+            {
+                app.UseMiddleware<ImpersonationMiddleware>();
+            }
+
+            app.UseAuthorization();
+
+            app.UseEndpoints(
+                routes => { routes.MapControllers(); });
         }
 
-        private Task ValidateCredentialsAsync(ValidateCredentialsContext context)
+        private static string GetFakeAccountHomeDir()
         {
+            string result;
             if (Program.IsWindows)
-                return ValidateWindowsTestCredentialsAsync(context);
+            {
+                result = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "WebDavServerTest");
+            }
+            else
+            {
+                result = Environment.ExpandEnvironmentVariables("%HOME%/.local/WebDavServerTest");
+            }
 
-            return ValidateLinuxTestCredentialsAsync(context);
+            Directory.CreateDirectory(result);
+            return result;
+        }
+
+        private async Task ValidateCredentialsAsync(ValidateCredentialsContext context)
+        {
+            if (await ValidateFakeAccounts(context))
+            {
+                return;
+            }
+
+            if (Program.IsWindows)
+            {
+                await ValidateWindowsTestCredentialsAsync(context);
+            }
+            else
+            {
+                await ValidateLinuxTestCredentialsAsync(context);
+            }
+        }
+
+        private ValueTask<bool> ValidateFakeAccounts(ValidateCredentialsContext context)
+        {
+            var fakeAccountHomeDir = GetFakeAccountHomeDir();
+            var credentials = new List<AccountInfo>()
+            {
+                new() { Username = "tester", Password = "noGh2eefabohgohc", HomeDir = fakeAccountHomeDir },
+                new() { Username = "test2@limebits.com", Password = "qwerty", HomeDir = fakeAccountHomeDir },
+            }.ToDictionary(x => x.Username, StringComparer.OrdinalIgnoreCase);
+
+            if (!credentials.TryGetValue(context.Username, out var accountInfo))
+            {
+                return new ValueTask<bool>(false);
+            }
+
+            if (accountInfo.Password != context.Password)
+            {
+                context.Fail("Invalid password");
+                return new ValueTask<bool>(true);
+            }
+
+            var groups = Enumerable.Empty<Group>();
+
+            var ticket = CreateAuthenticationTicket(accountInfo, groups);
+            context.Principal = ticket.Principal;
+            context.Properties = ticket.Properties;
+            context.Success();
+
+            return new ValueTask<bool>(true);
         }
 
         private Task ValidateLinuxTestCredentialsAsync(ValidateCredentialsContext context)
@@ -197,44 +319,23 @@ namespace FubarDev.WebDavServer.Sample.AspNetCore
             context.Properties = ticket.Properties;
             context.Success();
 
-            return Task.FromResult(0);
+            return Task.CompletedTask;
         }
 
         private Task ValidateWindowsTestCredentialsAsync(ValidateCredentialsContext context)
         {
-            var credentials = new List<AccountInfo>()
-            {
-                new AccountInfo() { Username = "tester", Password = "noGh2eefabohgohc", HomeDir = "c:\\temp\\tester" },
-            }.ToDictionary(x => x.Username, StringComparer.OrdinalIgnoreCase);
-
-            if (!credentials.TryGetValue(context.Username, out var accountInfo))
-                return HandleFailedAuthenticationAsync(context);
-
-            if (accountInfo.Password != context.Password)
-            {
-                context.Fail("Invalid password");
-                return Task.FromResult(0);
-            }
-
-            var groups = Enumerable.Empty<Group>();
-
-            var ticket = CreateAuthenticationTicket(accountInfo, groups);
-            context.Principal = ticket.Principal;
-            context.Properties = ticket.Properties;
-            context.Success();
-
-            return Task.FromResult(0);
+            return HandleFailedAuthenticationAsync(context);
         }
 
         private static Task HandleFailedAuthenticationAsync(ValidateCredentialsContext context, bool? allowAnonymousAccess = null, string authenticationScheme = "Basic")
         {
             if (context.Username != "anonymous")
-                return Task.FromResult(0);
+                return Task.CompletedTask;
 
             var hostOptions = context.HttpContext.RequestServices.GetRequiredService<IOptions<WebDavHostOptions>>();
             var allowAnonAccess = allowAnonymousAccess ?? hostOptions.Value.AllowAnonymousAccess;
             if (!allowAnonAccess)
-                return Task.FromResult(0);
+                return Task.CompletedTask;
 
             var groups = Enumerable.Empty<Group>();
             var accountInfo = new AccountInfo()
@@ -248,7 +349,7 @@ namespace FubarDev.WebDavServer.Sample.AspNetCore
             context.Properties = ticket.Properties;
             context.Success();
 
-            return Task.FromResult(0);
+            return Task.CompletedTask;
         }
 
         private static AuthenticationTicket CreateAuthenticationTicket(AccountInfo accountInfo, IEnumerable<Group> groups, string authenticationType = "passwd", string authenticationScheme = "Basic")

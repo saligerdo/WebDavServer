@@ -2,6 +2,11 @@
 // Copyright (c) Fubar Development Junker. All rights reserved.
 // </copyright>
 
+#nullable disable warnings
+#nullable enable annotations
+
+using System;
+
 using SQLite;
 
 namespace FubarDev.WebDavServer.FileSystem.SQLite
@@ -11,9 +16,9 @@ namespace FubarDev.WebDavServer.FileSystem.SQLite
     {
         [PrimaryKey]
         [Column("id")]
-        public string Id { get; set; }
+        public string Id { get; set; } = default!;
 
         [Column("data")]
-        public byte[] Data { get; set; }
+        public byte[] Data { get; set; } = Array.Empty<byte>();
     }
 }

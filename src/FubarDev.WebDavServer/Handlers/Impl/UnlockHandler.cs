@@ -8,34 +8,28 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using FubarDev.WebDavServer.Locking;
-using FubarDev.WebDavServer.Model;
-using FubarDev.WebDavServer.Model.Headers;
-
-using JetBrains.Annotations;
+using FubarDev.WebDavServer.Models;
 
 namespace FubarDev.WebDavServer.Handlers.Impl
 {
     /// <summary>
-    /// The implementation of the <see cref="IUnlockHandler"/> interface
+    /// The implementation of the <see cref="IUnlockHandler"/> interface.
     /// </summary>
     public class UnlockHandler : IUnlockHandler
     {
-        [NotNull]
-        private readonly IWebDavContext _context;
-
-        [CanBeNull]
-        private readonly ILockManager _lockManager;
+        private readonly IWebDavContextAccessor _contextAccessor;
+        private readonly ILockManager? _lockManager;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="UnlockHandler"/> class.
         /// </summary>
-        /// <param name="context">The WebDAV request context</param>
-        /// <param name="lockManager">The global lock manager</param>
-        public UnlockHandler([NotNull] IWebDavContext context, [CanBeNull] ILockManager lockManager = null)
+        /// <param name="contextAccessor">The WebDAV request context accessor.</param>
+        /// <param name="lockManager">The global lock manager.</param>
+        public UnlockHandler(IWebDavContextAccessor contextAccessor, ILockManager? lockManager = null)
         {
-            _context = context;
+            _contextAccessor = contextAccessor;
             _lockManager = lockManager;
-            HttpMethods = _lockManager == null ? new string[0] : new[] { "UNLOCK" };
+            HttpMethods = _lockManager == null ? Array.Empty<string>() : new[] { "UNLOCK" };
         }
 
         /// <inheritdoc />
@@ -45,18 +39,21 @@ namespace FubarDev.WebDavServer.Handlers.Impl
         public async Task<IWebDavResult> UnlockAsync(string path, LockTokenHeader stateToken, CancellationToken cancellationToken)
         {
             if (_lockManager == null)
+            {
                 throw new NotSupportedException();
+            }
 
             var releaseStatus = await _lockManager.ReleaseAsync(path, stateToken.StateToken, cancellationToken).ConfigureAwait(false);
             if (releaseStatus != LockReleaseStatus.Success)
             {
-                var href = new Uri(_context.PublicControllerUrl, path);
-                href = new Uri("/" + _context.PublicRootUrl.MakeRelativeUri(href).OriginalString);
+                var context = _contextAccessor.WebDavContext;
+                var href = new Uri(context.PublicControllerUrl, path);
+                href = new Uri("/" + context.PublicRootUrl.GetRelativeUrl(href).OriginalString);
                 return new WebDavResult<error>(
                     WebDavStatusCode.Conflict,
                     new error()
                     {
-                        ItemsElementName = new[] { ItemsChoiceType.locktokenmatchesrequesturi, },
+                        ItemsElementName = new[] { ItemsChoiceType.noconflictinglock, },
                         Items = new object[]
                         {
                             new errorNoconflictinglock()

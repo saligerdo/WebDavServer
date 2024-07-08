@@ -3,55 +3,38 @@
 // </copyright>
 
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Xml.Linq;
-
-using FubarDev.WebDavServer.Model;
 
 namespace FubarDev.WebDavServer.Props.Filters
 {
     /// <summary>
-    /// Filters the allowed properties by name
+    /// Filters the allowed properties by name.
     /// </summary>
-    public class PropFilter : IPropertyFilter
+    public class PropFilter : TrackingFilter
     {
-        private readonly ISet<XName> _selectedProperties;
-
-        private readonly HashSet<XName> _requestedProperties;
+        private readonly ImmutableHashSet<XName> _requestedProperties;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="PropFilter"/> class.
         /// </summary>
-        /// <param name="prop">The <see cref="prop"/> element containing the property names</param>
-        public PropFilter(prop prop)
+        /// <param name="prop">The <see cref="Models.prop"/> element containing the property names.</param>
+        public PropFilter(Models.prop prop)
         {
-            _requestedProperties = new HashSet<XName>(prop.Any.Select(x => x.Name));
-            _selectedProperties = new HashSet<XName>();
+            _requestedProperties = prop.Any.Select(x => x.Name).ToImmutableHashSet();
         }
 
         /// <inheritdoc />
-        public void Reset()
-        {
-            _selectedProperties.Clear();
-        }
-
-        /// <inheritdoc />
-        public bool IsAllowed(IProperty property)
+        public override bool IsAllowed(IProperty property)
         {
             return _requestedProperties.Contains(property.Name);
         }
 
         /// <inheritdoc />
-        public void NotifyOfSelection(IProperty property)
+        public override IEnumerable<MissingProperty> GetMissingProperties()
         {
-            _selectedProperties.Add(property.Name);
-        }
-
-        /// <inheritdoc />
-        public IEnumerable<MissingProperty> GetMissingProperties()
-        {
-            var missingProps = new HashSet<XName>(_requestedProperties);
-            missingProps.ExceptWith(_selectedProperties);
+            var missingProps = _requestedProperties.Except(SelectedProperties);
             return missingProps.Select(x => new MissingProperty(WebDavStatusCode.NotFound, x));
         }
     }

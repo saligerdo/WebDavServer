@@ -5,9 +5,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 
-using FubarDev.WebDavServer.Model;
-
-using JetBrains.Annotations;
+using FubarDev.WebDavServer.Models;
 
 namespace FubarDev.WebDavServer.Handlers
 {
@@ -19,12 +17,10 @@ namespace FubarDev.WebDavServer.Handlers
         /// <summary>
         /// Queries properties (dead or live) for a given <paramref name="path"/>.
         /// </summary>
-        /// <param name="path">The path to query the properties for</param>
-        /// <param name="request">Some information about the properties to query</param>
-        /// <param name="cancellationToken">The cancellcation token</param>
-        /// <returns>The result of the operation</returns>
-        [NotNull]
-        [ItemNotNull]
-        Task<IWebDavResult> PropFindAsync([NotNull] string path, [CanBeNull] propfind request, CancellationToken cancellationToken);
+        /// <param name="path">The path to query the properties for.</param>
+        /// <param name="request">Some information about the properties to query.</param>
+        /// <param name="cancellationToken">The cancellation token.</param>
+        /// <returns>The result of the operation.</returns>
+        Task<IWebDavResult> PropFindAsync(string path, propfind? request, CancellationToken cancellationToken);
     }
 }

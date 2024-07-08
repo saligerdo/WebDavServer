@@ -5,10 +5,6 @@
 using System.Threading;
 using System.Threading.Tasks;
 
-using FubarDev.WebDavServer.Model;
-
-using JetBrains.Annotations;
-
 namespace FubarDev.WebDavServer
 {
     /// <summary>
@@ -17,17 +13,16 @@ namespace FubarDev.WebDavServer
     public interface IWebDavResult
     {
         /// <summary>
-        /// Gets the WebDAV status code
+        /// Gets the WebDAV status code.
         /// </summary>
         WebDavStatusCode StatusCode { get; }
 
         /// <summary>
-        /// Writes the result to a <paramref name="response"/>
+        /// Writes the result to a <paramref name="response"/>.
         /// </summary>
-        /// <param name="response">The response object to write to</param>
-        /// <param name="ct">The cancellation token</param>
-        /// <returns>The async task</returns>
-        [NotNull]
-        Task ExecuteResultAsync([NotNull] IWebDavResponse response, CancellationToken ct);
+        /// <param name="response">The response object to write to.</param>
+        /// <param name="ct">The cancellation token.</param>
+        /// <returns>The async task.</returns>
+        Task ExecuteResultAsync(IWebDavResponse response, CancellationToken ct);
     }
 }

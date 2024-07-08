@@ -8,21 +8,18 @@ using System.Threading.Tasks;
 using System.Xml.Linq;
 
 using FubarDev.WebDavServer.FileSystem;
-using FubarDev.WebDavServer.Model;
-using FubarDev.WebDavServer.Props.Generic;
+using FubarDev.WebDavServer.Props.Converters;
 using FubarDev.WebDavServer.Props.Store;
-
-using JetBrains.Annotations;
 
 namespace FubarDev.WebDavServer.Props.Dead
 {
     /// <summary>
-    /// The <c>displayname</c> property
+    /// The <c>displayname</c> property.
     /// </summary>
-    public class DisplayNameProperty : GenericStringProperty, IDeadProperty
+    public class DisplayNameProperty : SimpleConvertingProperty<string>, IDeadProperty
     {
         /// <summary>
-        /// The XML name of the property
+        /// The XML name of the property.
         /// </summary>
         public static readonly XName PropertyName = WebDavXml.Dav + "displayname";
 
@@ -32,17 +29,17 @@ namespace FubarDev.WebDavServer.Props.Dead
 
         private readonly bool _hideExtension;
 
-        private string _value;
+        private string? _value;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="DisplayNameProperty"/> class.
         /// </summary>
-        /// <param name="entry">The entry to instantiate this property for</param>
-        /// <param name="store">The property store to store this property</param>
-        /// <param name="hideExtension">Hide the extension from the display name</param>
-        /// <param name="cost">The cost of querying the display names property</param>
-        public DisplayNameProperty([NotNull] IEntry entry, [NotNull] IPropertyStore store, bool hideExtension, int? cost = null)
-            : base(PropertyName, null, cost ?? store.Cost, null, null)
+        /// <param name="entry">The entry to instantiate this property for.</param>
+        /// <param name="store">The property store to store this property.</param>
+        /// <param name="hideExtension">Hide the extension from the display name.</param>
+        /// <param name="cost">The cost of querying the display names property.</param>
+        public DisplayNameProperty(IEntry entry, IPropertyStore store, bool hideExtension, int? cost = null)
+            : base(PropertyName, null, cost ?? store.Cost, new StringConverter())
         {
             _entry = entry;
             _store = store;
@@ -53,16 +50,15 @@ namespace FubarDev.WebDavServer.Props.Dead
         public override async Task<string> GetValueAsync(CancellationToken ct)
         {
             if (_value != null)
-                return _value;
-
-            if (_store != null)
             {
-                var storedValue = await _store.GetAsync(_entry, Name, ct).ConfigureAwait(false);
-                if (storedValue != null)
-                {
-                    Language = storedValue.Attribute(XNamespace.Xml + "lang")?.Value;
-                    return _value = storedValue.Value;
-                }
+                return _value;
+            }
+
+            var storedValue = await _store.GetAsync(_entry, Name, ct).ConfigureAwait(false);
+            if (storedValue != null)
+            {
+                Language = storedValue.Attribute(XNamespace.Xml + "lang")?.Value;
+                return _value = storedValue.Value;
             }
 
             var newName = _value = GetDefaultName();
@@ -84,7 +80,7 @@ namespace FubarDev.WebDavServer.Props.Dead
         }
 
         /// <inheritdoc />
-        public bool IsDefaultValue(XElement element)
+        public bool IsDefaultValue(XElement? element)
         {
             return element == null
                    || (!element.HasAttributes && Converter.FromElement(element) == GetDefaultName());

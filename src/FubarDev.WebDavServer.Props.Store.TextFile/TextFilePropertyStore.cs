@@ -12,7 +12,7 @@ using System.Threading.Tasks;
 using System.Xml.Linq;
 
 using FubarDev.WebDavServer.FileSystem;
-using FubarDev.WebDavServer.Model.Headers;
+using FubarDev.WebDavServer.Models;
 using FubarDev.WebDavServer.Props.Dead;
 
 using Microsoft.Extensions.Logging;
@@ -24,7 +24,7 @@ using Polly;
 namespace FubarDev.WebDavServer.Props.Store.TextFile
 {
     /// <summary>
-    /// A property store that stores the properties in a JSON file
+    /// A property store that stores the properties in a JSON file.
     /// </summary>
     public class TextFilePropertyStore : PropertyStoreBase, IFileSystemPropertyStore
     {
@@ -45,27 +45,29 @@ namespace FubarDev.WebDavServer.Props.Store.TextFile
         /// <summary>
         /// Initializes a new instance of the <see cref="TextFilePropertyStore"/> class.
         /// </summary>
-        /// <param name="options">The options for the text file property store</param>
-        /// <param name="deadPropertyFactory">The factory for the dead properties</param>
-        /// <param name="rootFolder">The root folder where the properties will be stored</param>
-        /// <param name="storeInRootOnly">Store all properties in the same JSON text file</param>
-        /// <param name="storeEntryName">The name of the JSON text file</param>
-        /// <param name="logger">The logger for the property store</param>
-        public TextFilePropertyStore(TextFilePropertyStoreOptions options, IDeadPropertyFactory deadPropertyFactory, string rootFolder, bool storeInRootOnly, string storeEntryName, ILogger<TextFilePropertyStore> logger)
+        /// <param name="options">The options for the text file property store.</param>
+        /// <param name="deadPropertyFactory">The factory for the dead properties.</param>
+        /// <param name="settings">The settings for this store.</param>
+        /// <param name="logger">The logger for the property store.</param>
+        public TextFilePropertyStore(
+            TextFilePropertyStoreOptions options,
+            IDeadPropertyFactory deadPropertyFactory,
+            TextFilePropertyStoreSettings settings,
+            ILogger<TextFilePropertyStore> logger)
             : base(deadPropertyFactory)
         {
             _logger = logger;
             _options = options;
-            _storeInRootOnly = storeInRootOnly;
-            _storeEntryName = storeEntryName;
-            RootPath = rootFolder;
+            _storeInRootOnly = settings.StoreInRootOnly;
+            _storeEntryName = settings.StoreEntryName;
+            RootPath = settings.RootFolder;
             var rnd = new Random();
             _fileReadPolicy = Policy<string>
                 .Handle<IOException>()
-                .WaitAndRetry(100, n => TimeSpan.FromMilliseconds(100 + rnd.Next(-10, 10)));
+                .WaitAndRetry(100, _ => TimeSpan.FromMilliseconds(100 + rnd.Next(-10, 10)));
             _fileWritePolicy = Policy
                 .Handle<IOException>()
-                .WaitAndRetry(100, n => TimeSpan.FromMilliseconds(100 + rnd.Next(-10, 10)));
+                .WaitAndRetry(100, _ => TimeSpan.FromMilliseconds(100 + rnd.Next(-10, 10)));
         }
 
         /// <inheritdoc />
@@ -86,12 +88,13 @@ namespace FubarDev.WebDavServer.Props.Store.TextFile
         public override Task<IReadOnlyCollection<XElement>> GetAsync(IEntry entry, CancellationToken cancellationToken)
         {
             if (_logger.IsEnabled(LogLevel.Trace))
-                _logger.LogTrace($"Get properties for {entry.Path}");
+            {
+                _logger.LogTrace("Get properties for {Path}", entry.Path);
+            }
 
             var storeData = Load(entry, false, cancellationToken);
-            EntryInfo info;
             IReadOnlyCollection<XElement> result;
-            if (storeData.Entries.TryGetValue(GetEntryKey(entry), out info))
+            if (storeData.Entries.TryGetValue(GetEntryKey(entry), out var info))
             {
                 result = info.Attributes
                     .Where(x => x.Key != GetETagProperty.PropertyName)
@@ -100,7 +103,7 @@ namespace FubarDev.WebDavServer.Props.Store.TextFile
             }
             else
             {
-                result = new XElement[0];
+                result = Array.Empty<XElement>();
             }
 
             return Task.FromResult(result);
@@ -110,14 +113,16 @@ namespace FubarDev.WebDavServer.Props.Store.TextFile
         public override Task SetAsync(IEntry entry, IEnumerable<XElement> elements, CancellationToken cancellationToken)
         {
             if (_logger.IsEnabled(LogLevel.Trace))
-                _logger.LogTrace($"Set properties for {entry.Path}");
+            {
+                _logger.LogTrace("Set properties for {Path}", entry.Path);
+            }
 
-            var info = GetInfo(entry, cancellationToken) ?? new EntryInfo();
+            var info = GetInfo(entry, cancellationToken);
             foreach (var element in elements)
             {
                 if (element.Name == GetETagProperty.PropertyName)
                 {
-                    _logger.LogWarning("The ETag property must not be set using the property store.");
+                    _logger.LogWarning("The ETag property must not be set using the property store");
                     continue;
                 }
 
@@ -125,22 +130,24 @@ namespace FubarDev.WebDavServer.Props.Store.TextFile
             }
 
             UpdateInfo(entry, info, cancellationToken);
-            return Task.FromResult(0);
+            return Task.CompletedTask;
         }
 
         /// <inheritdoc />
         public override Task<IReadOnlyCollection<bool>> RemoveAsync(IEntry entry, IEnumerable<XName> keys, CancellationToken cancellationToken)
         {
             if (_logger.IsEnabled(LogLevel.Trace))
-                _logger.LogTrace($"Remove properties for {entry.Path}");
+            {
+                _logger.LogTrace("Remove properties for {Path}", entry.Path);
+            }
 
-            var info = GetInfo(entry, cancellationToken) ?? new EntryInfo();
+            var info = GetInfo(entry, cancellationToken);
             var result = new List<bool>();
             foreach (var key in keys)
             {
                 if (key == GetETagProperty.PropertyName)
                 {
-                    _logger.LogWarning("The ETag property must not be set using the property store.");
+                    _logger.LogWarning("The ETag property must not be set using the property store");
                     result.Add(false);
                 }
                 else
@@ -158,7 +165,9 @@ namespace FubarDev.WebDavServer.Props.Store.TextFile
         {
             var fileName = GetFileNameFor(entry);
             if (!File.Exists(fileName))
-                return Task.FromResult(0);
+            {
+                return Task.CompletedTask;
+            }
 
             var storeData = Load(entry, false, cancellationToken);
             var entryKey = GetEntryKey(entry);
@@ -167,7 +176,7 @@ namespace FubarDev.WebDavServer.Props.Store.TextFile
                 Save(entry, storeData, cancellationToken);
             }
 
-            return Task.FromResult(0);
+            return Task.CompletedTask;
         }
 
         /// <inheritdoc />
@@ -175,15 +184,13 @@ namespace FubarDev.WebDavServer.Props.Store.TextFile
         {
             var storeData = Load(entry, false, cancellationToken);
             var entryKey = GetEntryKey(entry);
-            EntryInfo info;
-            if (!storeData.Entries.TryGetValue(entryKey, out info))
+            if (!storeData.Entries.TryGetValue(entryKey, out var info))
             {
                 info = new EntryInfo();
                 storeData.Entries.Add(entryKey, info);
             }
 
-            XElement etagElement;
-            if (!info.Attributes.TryGetValue(_etagKey, out etagElement))
+            if (!info.Attributes.TryGetValue(_etagKey, out var etagElement))
             {
                 var etag = new EntityTag(false);
                 etagElement = etag.ToXml();
@@ -202,8 +209,7 @@ namespace FubarDev.WebDavServer.Props.Store.TextFile
         {
             var storeData = Load(entry, false, cancellationToken);
             var entryKey = GetEntryKey(entry);
-            EntryInfo info;
-            if (!storeData.Entries.TryGetValue(entryKey, out info))
+            if (!storeData.Entries.TryGetValue(entryKey, out var info))
             {
                 info = new EntryInfo();
                 storeData.Entries.Add(entryKey, info);
@@ -221,7 +227,10 @@ namespace FubarDev.WebDavServer.Props.Store.TextFile
         private static string GetEntryKey(IEntry entry)
         {
             if (entry is ICollection)
+            {
                 return ".";
+            }
+
             return entry.Name.ToLower();
         }
 
@@ -237,9 +246,10 @@ namespace FubarDev.WebDavServer.Props.Store.TextFile
         {
             var storeData = Load(entry, false, cancellationToken);
 
-            EntryInfo info;
-            if (!storeData.Entries.TryGetValue(GetEntryKey(entry), out info))
+            if (!storeData.Entries.TryGetValue(GetEntryKey(entry), out var info))
+            {
                 info = new EntryInfo();
+            }
 
             return info;
         }
@@ -258,7 +268,7 @@ namespace FubarDev.WebDavServer.Props.Store.TextFile
         {
             try
             {
-                _fileWritePolicy.Execute(ct => File.WriteAllText(fileName, JsonConvert.SerializeObject(data)), cancellationToken);
+                _fileWritePolicy.Execute(_ => File.WriteAllText(fileName, JsonConvert.SerializeObject(data)), cancellationToken);
             }
             catch (Exception)
             {
@@ -269,17 +279,19 @@ namespace FubarDev.WebDavServer.Props.Store.TextFile
         private StoreData Load(string fileName, bool useCache, CancellationToken cancellationToken)
         {
             if (!File.Exists(fileName))
+            {
                 return new StoreData();
+            }
 
             if (!useCache)
             {
                 var result = JsonConvert.DeserializeObject<StoreData>(
-                    _fileReadPolicy.Execute(ct => File.ReadAllText(fileName), cancellationToken));
+                    _fileReadPolicy.Execute(_ => File.ReadAllText(fileName), cancellationToken));
                 return result;
             }
 
             return JsonConvert.DeserializeObject<StoreData>(
-                _fileReadPolicy.Execute(ct => File.ReadAllText(fileName), cancellationToken));
+                _fileReadPolicy.Execute(_ => File.ReadAllText(fileName), cancellationToken));
         }
 
         private string GetFileNameFor(IEntry entry)
@@ -306,7 +318,12 @@ namespace FubarDev.WebDavServer.Props.Store.TextFile
             }
 
             if (_logger.IsEnabled(LogLevel.Trace))
-                _logger.LogTrace($"Property store file name for {entry.Path} is {result}");
+            {
+                _logger.LogTrace(
+                    "Property store file name for {Path} is {Result}",
+                    entry.Path,
+                    result);
+            }
 
             return result;
         }
@@ -318,7 +335,10 @@ namespace FubarDev.WebDavServer.Props.Store.TextFile
             while (entry.Parent != null)
             {
                 if (!string.IsNullOrEmpty(entry.Name))
+                {
                     names.Add(entry.Name);
+                }
+
                 entry = entry.Parent;
             }
 
@@ -326,12 +346,16 @@ namespace FubarDev.WebDavServer.Props.Store.TextFile
             var result = Path.Combine(RootPath, Path.Combine(names.ToArray()));
 
             if (_logger.IsEnabled(LogLevel.Trace))
-                _logger.LogTrace($"File system path for {entry.Path} is {result}");
+            {
+                _logger.LogTrace(
+                    "File system path for {Path} is {Result}",
+                    entry.Path,
+                    result);
+            }
 
             return result;
         }
 
-        // ReSharper disable once ClassNeverInstantiated.Local
         private class StoreData
         {
             public IDictionary<string, EntryInfo> Entries { get; } = new Dictionary<string, EntryInfo>();

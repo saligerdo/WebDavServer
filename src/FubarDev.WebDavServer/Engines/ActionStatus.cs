@@ -5,7 +5,7 @@
 namespace FubarDev.WebDavServer.Engines
 {
     /// <summary>
-    /// The status of an action
+    /// The status of an action.
     /// </summary>
     public enum ActionStatus
     {
@@ -13,6 +13,11 @@ namespace FubarDev.WebDavServer.Engines
         /// The target entry was created
         /// </summary>
         Created,
+
+        /// <summary>
+        /// The target collection was updated
+        /// </summary>
+        Updated,
 
         /// <summary>
         /// The target entry was overwritten

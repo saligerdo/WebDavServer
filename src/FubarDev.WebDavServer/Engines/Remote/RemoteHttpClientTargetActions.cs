@@ -17,66 +17,46 @@ using System.Xml.Linq;
 using System.Xml.Serialization;
 
 using FubarDev.WebDavServer.FileSystem;
-using FubarDev.WebDavServer.Model;
-using FubarDev.WebDavServer.Model.Headers;
+using FubarDev.WebDavServer.Models;
 using FubarDev.WebDavServer.Props;
 using FubarDev.WebDavServer.Props.Dead;
-
-using JetBrains.Annotations;
 
 namespace FubarDev.WebDavServer.Engines.Remote
 {
     /// <summary>
-    /// Base class for remote target actions
+    /// Base class for remote target actions.
     /// </summary>
     public abstract class RemoteHttpClientTargetActions : IRemoteTargetActions
     {
-        [NotNull]
         private static readonly Encoding _defaultEncoding = new UTF8Encoding(false);
-
-        [NotNull]
-        private static readonly HttpMethod _propFindHttpMethod = new HttpMethod("PROPFIND");
-
-        [NotNull]
-        private static readonly HttpMethod _propPatchHttpMethod = new HttpMethod("PROPPATCH");
-
-        [NotNull]
-        private static readonly HttpMethod _mkColHttpMethod = new HttpMethod("MKCOL");
-
-        [NotNull]
-        private static readonly XmlSerializer _errorSerializer = new XmlSerializer(typeof(error));
-
-        [NotNull]
-        private static readonly XmlSerializer _multiStatusSerializer = new XmlSerializer(typeof(multistatus));
-
-        [NotNull]
-        private static readonly XmlSerializer _propFindSerializer = new XmlSerializer(typeof(propfind));
-
-        [NotNull]
-        private static readonly XmlSerializer _propertyUpdateSerializer = new XmlSerializer(typeof(propertyupdate));
+        private static readonly HttpMethod _propFindHttpMethod = new("PROPFIND");
+        private static readonly HttpMethod _propPatchHttpMethod = new("PROPPATCH");
+        private static readonly HttpMethod _mkColHttpMethod = new("MKCOL");
+        private static readonly XmlSerializer _errorSerializer = new(typeof(error));
+        private static readonly XmlSerializer _multiStatusSerializer = new(typeof(multistatus));
+        private static readonly XmlSerializer _propFindSerializer = new(typeof(propfind));
+        private static readonly XmlSerializer _propertyUpdateSerializer = new(typeof(propertyupdate));
 
         /// <summary>
         /// Initializes a new instance of the <see cref="RemoteHttpClientTargetActions"/> class.
         /// </summary>
-        /// <param name="dispatcher">The WebDAV dispatcher</param>
-        /// <param name="httpClient">The <see cref="HttpClient"/> to use for the communication with the remote server</param>
-        protected RemoteHttpClientTargetActions([NotNull] IWebDavDispatcher dispatcher, [NotNull] HttpClient httpClient)
+        /// <param name="context">The current WebDAV context.</param>
+        /// <param name="httpClient">The <see cref="HttpClient"/> to use for the communication with the remote server.</param>
+        protected RemoteHttpClientTargetActions(IWebDavContext context, HttpClient httpClient)
         {
-            Dispatcher = dispatcher;
+            Context = context;
             Client = httpClient;
         }
 
         /// <inheritdoc />
-        [NotNull]
-        public IWebDavDispatcher Dispatcher { get; }
+        public IWebDavContext Context { get; }
 
         /// <inheritdoc />
         public RecursiveTargetBehaviour ExistingTargetBehaviour { get; } = RecursiveTargetBehaviour.DeleteTarget;
 
         /// <summary>
-        /// Gets the <see cref="HttpClient"/> to communicate with the remote server
+        /// Gets the <see cref="HttpClient"/> to communicate with the remote server.
         /// </summary>
-        [NotNull]
         protected HttpClient Client { get; }
 
         /// <inheritdoc />
@@ -86,7 +66,11 @@ namespace FubarDev.WebDavServer.Engines.Remote
         public abstract Task<ActionResult> ExecuteAsync(IDocument source, RemoteDocumentTarget destination, CancellationToken cancellationToken);
 
         /// <inheritdoc />
-        public abstract Task ExecuteAsync(ICollection source, RemoteCollectionTarget destination, CancellationToken cancellationToken);
+        public abstract Task CleanupAsync(
+            ICollection source,
+            RemoteCollectionTarget destination,
+            IEnumerable<ActionResult> childResults,
+            CancellationToken cancellationToken);
 
         /// <inheritdoc />
         public Task<IReadOnlyCollection<XName>> SetPropertiesAsync(RemoteCollectionTarget target, IEnumerable<IUntypedWriteableProperty> properties, CancellationToken cancellationToken)
@@ -112,7 +96,9 @@ namespace FubarDev.WebDavServer.Engines.Remote
                 using (var httpResponse = await Client.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false))
                 {
                     if (!httpResponse.IsSuccessStatusCode)
+                    {
                         throw new RemoteTargetException("Failed to create");
+                    }
 
                     var resultDoc = await ReadResponseAsync(httpResponse).ConfigureAwait(false);
                     if (resultDoc == null)
@@ -123,27 +109,39 @@ namespace FubarDev.WebDavServer.Engines.Remote
 
                     var result = Parse(targetUrl, httpResponse, resultDoc);
                     if (result.response.Length == 0)
+                    {
                         return new RemoteCollectionTarget(collection, name, targetUrl, true, this);
+                    }
 
                     if (result.response.Length > 1)
+                    {
                         throw new RemoteTargetException("Received more than one multi-status response", targetUrl);
+                    }
 
                     var response = result.response[0];
 
                     var hrefs = response.GetHrefs().Select(x => new Uri(x, UriKind.RelativeOrAbsolute)).ToList();
                     if (hrefs.Count == 0)
+                    {
                         hrefs.Add(targetUrl);
+                    }
 
                     if (response.error != null)
+                    {
                         throw CreateException(targetUrl, response.error);
+                    }
 
                     var statusIndex = Array.IndexOf(response.ItemsElementName, ItemsChoiceType2.status);
                     if (statusIndex == -1)
+                    {
                         return new RemoteCollectionTarget(collection, name, targetUrl, true, this);
+                    }
 
                     var status = Status.Parse((string)response.Items[statusIndex]);
                     if (!status.IsSuccessStatusCode)
+                    {
                         throw new RemoteTargetException(status.ToString(), hrefs);
+                    }
 
                     return new RemoteCollectionTarget(collection, name, targetUrl, true, this);
                 }
@@ -183,26 +181,37 @@ namespace FubarDev.WebDavServer.Engines.Remote
                 using (var httpResponse = await Client.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false))
                 {
                     if (httpResponse.StatusCode == HttpStatusCode.NotFound)
+                    {
                         return new RemoteMissingTarget(collection, targetUrl, name, this);
+                    }
 
                     var resultDoc = await ReadResponseAsync(httpResponse).ConfigureAwait(false);
                     if (resultDoc == null)
+                    {
                         throw new RemoteTargetException("The destination server didn't return a response", targetUrl);
+                    }
 
                     result = Parse(targetUrl, httpResponse, resultDoc);
                 }
             }
 
             if (result.response == null || result.response.Length == 0)
+            {
                 throw new RemoteTargetException("The destination server didn't return a response", targetUrl);
+            }
+
             if (result.response.Length != 1)
+            {
                 throw new RemoteTargetException("Received more than one multi-status response", targetUrl);
+            }
 
             var response = result.response[0];
 
             var hrefs = response.GetHrefs().Select(x => new Uri(x, UriKind.RelativeOrAbsolute)).ToList();
             if (hrefs.Count == 0)
+            {
                 hrefs.Add(targetUrl);
+            }
 
             var statusIndex = Array.IndexOf(response.ItemsElementName, ItemsChoiceType2.status);
             var responseStatus = GetStatusCode(
@@ -211,24 +220,32 @@ namespace FubarDev.WebDavServer.Engines.Remote
                 targetUrl,
                 hrefs);
             if (responseStatus == (int)WebDavStatusCode.NotFound)
+            {
                 return new RemoteMissingTarget(collection, targetUrl, name, this);
+            }
 
             var propStatIndex = Array.IndexOf(response.ItemsElementName, ItemsChoiceType2.propstat);
             if (propStatIndex == -1)
+            {
                 throw new RemoteTargetException("No result returned", hrefs);
+            }
 
             var propStat = (propstat)response.Items[propStatIndex];
-            var location = string.IsNullOrEmpty(propStat.location?.href) ? targetUrl : new Uri(propStat.location.href, UriKind.RelativeOrAbsolute);
+            var location = string.IsNullOrEmpty(propStat.location?.href) ? targetUrl : new Uri(propStat.location!.href, UriKind.RelativeOrAbsolute);
             var propStatus = GetStatusCode(propStat.error, propStat.status, location, hrefs);
             if (propStatus == (int)WebDavStatusCode.NotFound)
+            {
                 return new RemoteMissingTarget(collection, targetUrl, name, this);
+            }
 
             var resourceType = propStat
                 .prop.Any
                 .SingleOrDefault(x => x.Name == Props.Live.ResourceTypeProperty.PropertyName);
             var collectionElement = resourceType?.Element(WebDavXml.Dav + "collection");
             if (collectionElement == null)
+            {
                 return new RemoteDocumentTarget(collection, name, targetUrl, this);
+            }
 
             return new RemoteCollectionTarget(collection, name, collection.DestinationUrl.AppendDirectory(name), false, this);
         }
@@ -258,13 +275,12 @@ namespace FubarDev.WebDavServer.Engines.Remote
         }
 
         /// <summary>
-        /// Creates an exception for a failed remote operation
+        /// Creates an exception for a failed remote operation.
         /// </summary>
-        /// <param name="requestUrl">The request URL</param>
-        /// <param name="error">The error object</param>
-        /// <returns>The new remote target exception</returns>
-        [NotNull]
-        protected static RemoteTargetException CreateException([NotNull] Uri requestUrl, [NotNull] error error)
+        /// <param name="requestUrl">The request URL.</param>
+        /// <param name="error">The error object.</param>
+        /// <returns>The new remote target exception.</returns>
+        protected static RemoteTargetException CreateException(Uri requestUrl, error error)
         {
             var hrefs = new List<Uri>();
             string message = "Unknown error";
@@ -307,19 +323,21 @@ namespace FubarDev.WebDavServer.Engines.Remote
             }
 
             if (hrefs.Count == 0)
+            {
                 hrefs.Add(requestUrl);
+            }
 
             return new RemoteTargetException(message, hrefs);
         }
 
         /// <summary>
-        /// Parse the response for a request
+        /// Parse the response for a request.
         /// </summary>
-        /// <param name="requrestUrl">The request URL</param>
-        /// <param name="responseMessage">The response message</param>
-        /// <param name="document">The response document</param>
-        /// <returns>The multistatus created from the <paramref name="document"/></returns>
-        protected multistatus Parse([NotNull] Uri requrestUrl, [NotNull] HttpResponseMessage responseMessage, [CanBeNull] XDocument document)
+        /// <param name="requestUrl">The request URL.</param>
+        /// <param name="responseMessage">The response message.</param>
+        /// <param name="document">The response document.</param>
+        /// <returns>The <see cref="multistatus"/> created from the <paramref name="document"/>.</returns>
+        protected multistatus Parse(Uri requestUrl, HttpResponseMessage responseMessage, XDocument? document)
         {
             if (document == null)
             {
@@ -330,7 +348,7 @@ namespace FubarDev.WebDavServer.Engines.Remote
                     {
                         new response()
                         {
-                            href = requrestUrl.ToString(),
+                            href = requestUrl.ToString(),
                             ItemsElementName = new[] { ItemsChoiceType2.status, },
                             Items = new object[] { status.ToString() },
                         },
@@ -340,9 +358,14 @@ namespace FubarDev.WebDavServer.Engines.Remote
 
             var errorName = WebDavXml.Dav + "error";
             Debug.Assert(document.Root != null, "document.Root != null");
+            if (document.Root == null)
+            {
+                throw new InvalidOperationException("Invalid response. The document root element is missing.");
+            }
+
             if (document.Root.Name == errorName)
             {
-                var error = (error)_errorSerializer.Deserialize(document.Root.CreateReader());
+                var error = (error)_errorSerializer.Deserialize(document.Root.CreateReader())!;
                 var status = new Status($"HTTP/{responseMessage.Version}", responseMessage.StatusCode, responseMessage.ReasonPhrase);
                 return new multistatus
                 {
@@ -350,7 +373,7 @@ namespace FubarDev.WebDavServer.Engines.Remote
                     {
                         new response()
                         {
-                            href = requrestUrl.ToString(),
+                            href = requestUrl.ToString(),
                             ItemsElementName = new[] { ItemsChoiceType2.status, },
                             Items = new object[] { status.ToString() },
                             error = error,
@@ -359,32 +382,39 @@ namespace FubarDev.WebDavServer.Engines.Remote
                 };
             }
 
-            var result = (multistatus)_multiStatusSerializer.Deserialize(document.CreateReader());
+            var result = (multistatus)_multiStatusSerializer.Deserialize(document.CreateReader())!;
             return result;
         }
 
         /// <summary>
-        /// Read the response from the <paramref name="responseMessage"/>
+        /// Read the response from the <paramref name="responseMessage"/>.
         /// </summary>
-        /// <param name="responseMessage">The response to read the <see cref="XDocument"/> from</param>
-        /// <returns>The <see cref="XDocument"/></returns>
-        [NotNull]
-        [ItemCanBeNull]
-        protected async Task<XDocument> ReadResponseAsync([NotNull] HttpResponseMessage responseMessage)
+        /// <param name="responseMessage">The response to read the <see cref="XDocument"/> from.</param>
+        /// <returns>The <see cref="XDocument"/>.</returns>
+        protected async Task<XDocument?> ReadResponseAsync(HttpResponseMessage responseMessage)
         {
             var content = responseMessage.Content;
-            if (content == null)
-                return null;
-
-            Encoding encoding = null;
+            Encoding? encoding = null;
             if (content.Headers.ContentType != null)
             {
                 switch (content.Headers.ContentType.MediaType)
                 {
                     case "application/xml":
                     case "text/xml":
-                        if (!string.IsNullOrEmpty(content.Headers.ContentType.CharSet))
-                            encoding = Encoding.GetEncoding(content.Headers.ContentType.CharSet);
+                        var charSet = content.Headers.ContentType.CharSet?.Trim();
+                        if (!string.IsNullOrEmpty(charSet))
+                        {
+                            if (charSet.StartsWith("\""))
+                            {
+                                charSet = charSet.Substring(1, charSet.Length - 2).Trim();
+                            }
+
+                            if (!string.IsNullOrEmpty(charSet))
+                            {
+                                encoding = Encoding.GetEncoding(charSet);
+                            }
+                        }
+
                         break;
                     default:
                         throw new NotSupportedException($"Unsupported media type {content.Headers.ContentType.MediaType}");
@@ -393,38 +423,42 @@ namespace FubarDev.WebDavServer.Engines.Remote
 
             var buffer = await content.ReadAsByteArrayAsync().ConfigureAwait(false);
             if (buffer.Length == 0)
-                return null;
-
-            using (var input = new MemoryStream(buffer))
             {
-                if (encoding == null)
-                {
-                    return XDocument.Load(input);
-                }
-
-                using (var reader = new StreamReader(input, encoding))
-                {
-                    return XDocument.Load(reader);
-                }
+                return null;
             }
+
+            using var input = new MemoryStream(buffer);
+            if (encoding == null)
+            {
+                return XDocument.Load(input);
+            }
+
+            using var reader = new StreamReader(input, encoding);
+            return XDocument.Load(reader);
         }
 
-        private static int GetStatusCode([CanBeNull] error error, [CanBeNull] string statusLine, [NotNull] Uri targetUrl, [NotNull][ItemNotNull] IReadOnlyCollection<Uri> hrefs)
+        private static int GetStatusCode(error? error, string? statusLine, Uri targetUrl, IReadOnlyCollection<Uri> hrefs)
         {
             if (error != null)
+            {
                 throw CreateException(targetUrl, error);
+            }
 
             if (string.IsNullOrEmpty(statusLine))
+            {
                 return (int)WebDavStatusCode.OK;
+            }
 
             var status = Status.Parse(statusLine);
             if (!status.IsSuccessStatusCode && status.StatusCode != (int)WebDavStatusCode.NotFound)
+            {
                 throw new RemoteTargetException(status.ToString(), hrefs);
+            }
 
             return status.StatusCode;
         }
 
-        private static HttpContent CreateContent([NotNull] XmlSerializer serializer, [NotNull] object requestData)
+        private static HttpContent CreateContent(XmlSerializer serializer, object requestData)
         {
             byte[] data;
             using (var requestStream = new MemoryStream())
@@ -448,7 +482,7 @@ namespace FubarDev.WebDavServer.Engines.Remote
             return content;
         }
 
-        private async Task<IReadOnlyCollection<XName>> SetPropertiesAsync([NotNull] Uri targetUrl, [NotNull][ItemNotNull] IEnumerable<IUntypedWriteableProperty> properties, CancellationToken cancellationToken)
+        private async Task<IReadOnlyCollection<XName>> SetPropertiesAsync(Uri targetUrl, IEnumerable<IUntypedWriteableProperty> properties, CancellationToken cancellationToken)
         {
             var elements = new List<XElement>();
 
@@ -457,7 +491,9 @@ namespace FubarDev.WebDavServer.Engines.Remote
                 var element = await property.GetXmlValueAsync(cancellationToken).ConfigureAwait(false);
                 var deadProp = property as IDeadProperty;
                 if (deadProp == null || !deadProp.IsDefaultValue(element))
+                {
                     elements.Add(element);
+                }
             }
 
             var requestData = new propertyupdate()
@@ -484,26 +520,37 @@ namespace FubarDev.WebDavServer.Engines.Remote
                 using (var httpResponse = await Client.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false))
                 {
                     if (httpResponse.IsSuccessStatusCode)
+                    {
                         return new XName[0];
+                    }
 
                     var resultDoc = await ReadResponseAsync(httpResponse).ConfigureAwait(false);
                     if (resultDoc == null)
+                    {
                         throw new RemoteTargetException("The destination server didn't return a response", targetUrl);
+                    }
 
                     result = Parse(targetUrl, httpResponse, resultDoc);
                 }
             }
 
             if (result.response == null || result.response.Length == 0)
+            {
                 throw new RemoteTargetException("The destination server didn't return a response", targetUrl);
+            }
+
             if (result.response.Length != 1)
+            {
                 throw new RemoteTargetException("Received more than one multi-status response", targetUrl);
+            }
 
             var response = result.response[0];
 
             var hrefs = response.GetHrefs().Select(x => new Uri(x, UriKind.RelativeOrAbsolute)).ToList();
             if (hrefs.Count == 0)
+            {
                 hrefs.Add(targetUrl);
+            }
 
             var statusIndex = Array.IndexOf(response.ItemsElementName, ItemsChoiceType2.status);
             var isFailure = response.error != null;
@@ -532,7 +579,9 @@ namespace FubarDev.WebDavServer.Engines.Remote
             }
 
             if (failedProperties.Count == 0 && (isFailure || hasFailedPropStats))
+            {
                 throw new RemoteTargetException("Failed properties were not returned by the server.");
+            }
 
             return failedProperties;
         }

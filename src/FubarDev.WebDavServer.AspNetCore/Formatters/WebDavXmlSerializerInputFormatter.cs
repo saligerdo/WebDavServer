@@ -2,19 +2,22 @@
 // Copyright (c) Fubar Development Junker. All rights reserved.
 // </copyright>
 
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Formatters;
 
 namespace FubarDev.WebDavServer.AspNetCore.Formatters
 {
     /// <summary>
-    /// The formatter for the WebDAV request body
+    /// The formatter for the WebDAV request body.
     /// </summary>
     public class WebDavXmlSerializerInputFormatter : XmlSerializerInputFormatter
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="WebDavXmlSerializerInputFormatter"/> class.
         /// </summary>
-        public WebDavXmlSerializerInputFormatter()
+        /// <param name="options">The MVC options.</param>
+        public WebDavXmlSerializerInputFormatter(MvcOptions options)
+            : base(options)
         {
             SupportedMediaTypes.Add("text/plain");
         }
@@ -32,10 +35,17 @@ namespace FubarDev.WebDavServer.AspNetCore.Formatters
                     switch (request.Method)
                     {
                         case "LOCK":
-                            return true;
                         case "PROPFIND":
                             return true;
                     }
+                }
+
+                // The following HTTP methods should have an XML body
+                // even when the content-type wasn't set.
+                if (request.Method is "LOCK" or "PROPFIND" or "PROPPATCH")
+                {
+                    // Workaround for the litmus tool.
+                    return true;
                 }
             }
 

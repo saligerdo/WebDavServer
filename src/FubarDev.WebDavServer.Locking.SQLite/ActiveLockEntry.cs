@@ -2,6 +2,9 @@
 // Copyright (c) Fubar Development Junker. All rights reserved.
 // </copyright>
 
+#nullable disable warnings
+#nullable enable annotations
+
 using System;
 using System.Xml.Linq;
 
@@ -15,26 +18,21 @@ namespace FubarDev.WebDavServer.Locking.SQLite
         [PrimaryKey]
         [Column("id")]
         [MaxLength(100)]
-        [NotNull]
         public string StateToken { get; set; } = string.Empty;
 
         [Column("path")]
-        [NotNull]
         public string Path { get; set; } = string.Empty;
 
         [Column("href")]
-        [NotNull]
         public string Href { get; set; } = string.Empty;
 
         [Column("recursive")]
         public bool Recursive { get; set; }
 
         [Column("access_type")]
-        [NotNull]
         public string AccessType { get; set; } = string.Empty;
 
         [Column("share_mode")]
-        [NotNull]
         public string ShareMode { get; set; } = string.Empty;
 
         [Column("timeout")]
@@ -50,13 +48,26 @@ namespace FubarDev.WebDavServer.Locking.SQLite
         public DateTime Expiration { get; set; }
 
         [Column("owner")]
-        public string Owner { get; set; }
+        public string? Owner { get; set; }
 
-        public XElement GetOwner()
+        [Column("ownerHref")]
+        public string? OwnerHref { get; set; }
+
+        /// <inheritdoc />
+        public XElement? GetOwnerHref()
         {
-            if (Owner == null)
+            if (OwnerHref == null)
+            {
                 return null;
-            return XElement.Parse(Owner);
+            }
+
+            return XElement.Parse(OwnerHref);
+        }
+
+        /// <inheritdoc />
+        public override string ToString()
+        {
+            return $"Path={Path} [Href={Href}, Recursive={Recursive}, AccessType={AccessType}, ShareMode={ShareMode}, Timeout={Timeout}, Owner={Owner}, OwnerHref={OwnerHref}, StateToken={StateToken}, Issued={Issued:O}, LastRefresh={LastRefresh:O}, Expiration={Expiration:O}]";
         }
     }
 }

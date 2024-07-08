@@ -7,34 +7,39 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Xml.Linq;
 
 using FubarDev.WebDavServer.FileSystem;
 using FubarDev.WebDavServer.Locking;
-using FubarDev.WebDavServer.Model;
-using FubarDev.WebDavServer.Model.Headers;
+using FubarDev.WebDavServer.Models;
 using FubarDev.WebDavServer.Utils;
 
 namespace FubarDev.WebDavServer.Handlers.Impl
 {
     /// <summary>
-    /// The implementation of the <see cref="IDeleteHandler"/> interface
+    /// The implementation of the <see cref="IDeleteHandler"/> interface.
     /// </summary>
     public class DeleteHandler : IDeleteHandler
     {
         private readonly IFileSystem _rootFileSystem;
 
-        private readonly IWebDavContext _context;
+        private readonly IWebDavContextAccessor _contextAccessor;
+
+        private readonly IImplicitLockFactory _implicitLockFactory;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="DeleteHandler"/> class.
         /// </summary>
-        /// <param name="rootFileSystem">The root file system</param>
-        /// <param name="context">The current WebDAV context</param>
-        public DeleteHandler(IFileSystem rootFileSystem, IWebDavContext context)
+        /// <param name="rootFileSystem">The root file system.</param>
+        /// <param name="contextAccessor">The WebDAV context accessor.</param>
+        /// <param name="implicitLockFactory">A factory to create implicit locks.</param>
+        public DeleteHandler(
+            IFileSystem rootFileSystem,
+            IWebDavContextAccessor contextAccessor,
+            IImplicitLockFactory implicitLockFactory)
         {
             _rootFileSystem = rootFileSystem;
-            _context = context;
+            _contextAccessor = contextAccessor;
+            _implicitLockFactory = implicitLockFactory;
         }
 
         /// <inheritdoc />
@@ -43,11 +48,14 @@ namespace FubarDev.WebDavServer.Handlers.Impl
         /// <inheritdoc />
         public async Task<IWebDavResult> DeleteAsync(string path, CancellationToken cancellationToken)
         {
+            var context = _contextAccessor.WebDavContext;
             var selectionResult = await _rootFileSystem.SelectAsync(path, cancellationToken).ConfigureAwait(false);
             if (selectionResult.IsMissing)
             {
-                if (_context.RequestHeaders.IfNoneMatch != null)
+                if (context.RequestHeaders.IfNoneMatch != null)
+                {
                     throw new WebDavException(WebDavStatusCode.PreconditionFailed);
+                }
 
                 throw new WebDavException(WebDavStatusCode.NotFound);
             }
@@ -55,24 +63,26 @@ namespace FubarDev.WebDavServer.Handlers.Impl
             var targetEntry = selectionResult.TargetEntry;
             Debug.Assert(targetEntry != null, "targetEntry != null");
 
-            await _context.RequestHeaders
+            await context.RequestHeaders
                 .ValidateAsync(selectionResult.TargetEntry, cancellationToken).ConfigureAwait(false);
 
             var lockRequirements = new Lock(
-                new Uri(path, UriKind.Relative),
-                _context.PublicRelativeRequestUrl,
+                selectionResult.TargetEntry.Path,
+                context.HrefUrl,
                 selectionResult.ResultType == SelectionResultType.FoundCollection,
-                new XElement(WebDavXml.Dav + "owner", _context.User.Identity.Name),
+                context.User.Identity?.GetOwner(),
+                context.User.Identity?.GetOwnerHref(),
                 LockAccessType.Write,
                 LockShareMode.Exclusive,
                 TimeoutHeader.Infinite);
-            var lockManager = _rootFileSystem.LockManager;
-            var tempLock = lockManager == null
-                ? new ImplicitLock(true)
-                : await lockManager.LockImplicitAsync(_rootFileSystem, _context.RequestHeaders.If?.Lists, lockRequirements, cancellationToken)
-                                   .ConfigureAwait(false);
+            var tempLock = await _implicitLockFactory.CreateAsync(
+                    lockRequirements,
+                    cancellationToken)
+                .ConfigureAwait(false);
             if (!tempLock.IsSuccessful)
+            {
                 return tempLock.CreateErrorResponse();
+            }
 
             try
             {
@@ -94,23 +104,7 @@ namespace FubarDev.WebDavServer.Handlers.Impl
                     deleteResult = new DeleteResult(WebDavStatusCode.Forbidden, targetEntry);
                 }
 
-                var result = new multistatus()
-                {
-                    response = new[]
-                    {
-                        new response()
-                        {
-                            href = _context.PublicControllerUrl
-                                .Append((deleteResult.FailedEntry ?? targetEntry).Path).OriginalString,
-                            ItemsElementName = new[] { ItemsChoiceType2.status, },
-                            Items = new object[]
-                            {
-                                new Status(_context.RequestProtocol, deleteResult.StatusCode).ToString(),
-                            },
-                        },
-                    },
-                };
-
+                var lockManager = _rootFileSystem.LockManager;
                 if (lockManager != null)
                 {
                     var locksToRemove = await lockManager
@@ -125,6 +119,29 @@ namespace FubarDev.WebDavServer.Handlers.Impl
                             .ConfigureAwait(false);
                     }
                 }
+
+                // In the case of success: return 204 No Content
+                if (deleteResult.StatusCode is WebDavStatusCode.OK or WebDavStatusCode.NoContent)
+                {
+                    return new WebDavResult(WebDavStatusCode.NoContent);
+                }
+
+                // Otherwise, return a multistatus with 207 Multi-Status.
+                var result = new multistatus()
+                {
+                    response = new[]
+                    {
+                        new response()
+                        {
+                            href = context.HrefUrl.OriginalString,
+                            ItemsElementName = new[] { ItemsChoiceType2.status, },
+                            Items = new object[]
+                            {
+                                new Status(context.RequestProtocol, deleteResult.StatusCode).ToString(),
+                            },
+                        },
+                    },
+                };
 
                 return new WebDavResult<multistatus>(WebDavStatusCode.MultiStatus, result);
             }

@@ -3,32 +3,30 @@
 // </copyright>
 
 using System;
-using System.Diagnostics;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
 using FubarDev.WebDavServer.FileSystem;
 
-using JetBrains.Annotations;
-
 namespace FubarDev.WebDavServer.Engines.Local
 {
     /// <summary>
-    /// The <see cref="ITargetActions{TCollection,TDocument,TMissing}"/> implementation that copies only entries within the same file system
+    /// The <see cref="ITargetActions{TCollection,TDocument,TMissing}"/> implementation that copies only entries within the same file system.
     /// </summary>
     public class CopyInFileSystemTargetAction : ITargetActions<CollectionTarget, DocumentTarget, MissingTarget>
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="CopyInFileSystemTargetAction"/> class.
         /// </summary>
-        /// <param name="dispatcher">The WebDAV dispatcher</param>
-        public CopyInFileSystemTargetAction([NotNull] IWebDavDispatcher dispatcher)
+        /// <param name="context">The current WebDAV context.</param>
+        public CopyInFileSystemTargetAction(IWebDavContext context)
         {
-            Dispatcher = dispatcher;
+            Context = context;
         }
 
         /// <inheritdoc />
-        public IWebDavDispatcher Dispatcher { get; }
+        public IWebDavContext Context { get; }
 
         /// <inheritdoc />
         public RecursiveTargetBehaviour ExistingTargetBehaviour { get; } = RecursiveTargetBehaviour.Overwrite;
@@ -45,7 +43,11 @@ namespace FubarDev.WebDavServer.Engines.Local
         {
             try
             {
-                Debug.Assert(destination.Parent != null, "destination.Parent != null");
+                if (destination.Parent == null)
+                {
+                    throw new InvalidOperationException("Cannot copy to destination. Target element is unspecified.");
+                }
+
                 await source.CopyToAsync(destination.Parent.Collection, destination.Name, cancellationToken).ConfigureAwait(false);
                 return new ActionResult(ActionStatus.Overwritten, destination);
             }
@@ -59,7 +61,11 @@ namespace FubarDev.WebDavServer.Engines.Local
         }
 
         /// <inheritdoc />
-        public Task ExecuteAsync(ICollection source, CollectionTarget destination, CancellationToken cancellationToken)
+        public Task CleanupAsync(
+            ICollection source,
+            CollectionTarget destination,
+            IEnumerable<ActionResult> childResults,
+            CancellationToken cancellationToken)
         {
             return CopyETagAsync(source, destination.Collection, cancellationToken);
         }
@@ -67,7 +73,9 @@ namespace FubarDev.WebDavServer.Engines.Local
         private static async Task CopyETagAsync(IEntry source, IEntry dest, CancellationToken cancellationToken)
         {
             if (dest is IEntityTagEntry)
+            {
                 return;
+            }
 
             var sourcePropStore = source.FileSystem.PropertyStore;
             var destPropStore = dest.FileSystem.PropertyStore;

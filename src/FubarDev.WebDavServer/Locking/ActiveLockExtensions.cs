@@ -4,30 +4,29 @@
 
 using System.Xml.Linq;
 
-using FubarDev.WebDavServer.Model;
-using FubarDev.WebDavServer.Model.Headers;
+using FubarDev.WebDavServer.Models;
 
 namespace FubarDev.WebDavServer.Locking
 {
     /// <summary>
-    /// Extension methods for the <see cref="IActiveLock"/> interface
+    /// Extension methods for the <see cref="IActiveLock"/> interface.
     /// </summary>
     public static class ActiveLockExtensions
     {
         /// <summary>
-        /// Creates an <see cref="XElement"/> for a <see cref="IActiveLock"/>
+        /// Creates an <see cref="XElement"/> for a <see cref="IActiveLock"/>.
         /// </summary>
-        /// <param name="l">The active lock to create the <see cref="XElement"/> for</param>
-        /// <param name="omitOwner">Should the owner be omitted?</param>
-        /// <param name="omitToken">Should the lock state token be omitted?</param>
-        /// <returns>The newly created <see cref="XElement"/> for the active lock</returns>
+        /// <param name="l">The active lock to create the <see cref="XElement"/> for.</param>
+        /// <param name="omitOwner">Indicates whether the owner should be omitted.</param>
+        /// <param name="omitToken">Indicates whether the lock state token should be omitted.</param>
+        /// <returns>The newly created <see cref="XElement"/> for the active lock.</returns>
         public static XElement ToXElement(this IActiveLock l, bool omitOwner = false, bool omitToken = false)
         {
             var timeout = l.Timeout == TimeoutHeader.Infinite ? "Infinite" : $"Second-{l.Timeout.TotalSeconds:F0}";
             var depth = l.Recursive ? DepthHeader.Infinity : DepthHeader.Zero;
             var lockScope = LockShareMode.Parse(l.ShareMode);
             var lockType = LockAccessType.Parse(l.AccessType);
-            var owner = l.GetOwner();
+            var owner = l.GetOwnerHref();
             var result = new XElement(
                 WebDavXml.Dav + "activelock",
                 new XElement(
@@ -41,7 +40,9 @@ namespace FubarDev.WebDavServer.Locking
                     depth.Value));
 
             if (owner != null && !omitOwner)
+            {
                 result.Add(owner);
+            }
 
             result.Add(
                 new XElement(
